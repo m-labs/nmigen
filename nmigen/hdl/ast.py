@@ -12,8 +12,9 @@ __all__ = [
     "Value", "Const", "C", "Operator", "Mux", "Part", "Slice", "Cat", "Repl",
     "Array", "ArrayProxy",
     "Signal", "ClockSignal", "ResetSignal",
-    "Statement", "Assign", "Switch", "Delay", "Tick", "Passive",
-    "ValueKey", "ValueDict", "ValueSet", "SignalKey", "SignalDict", "SignalSet",
+    "Statement", "Assign", "Assert", "Assume", "Switch", "Delay", "Tick",
+    "Passive", "ValueKey", "ValueDict", "ValueSet", "SignalKey", "SignalDict",
+    "SignalSet",
 ]
 
 
@@ -824,6 +825,65 @@ class Assign(Statement):
 
     def __repr__(self):
         return "(eq {!r} {!r})".format(self.lhs, self.rhs)
+
+
+class Assert(Statement):
+    def __init__(self, test, _en=None, _check=None):
+        self.test = Value.wrap(test)
+        if _en is None:
+            self._en = Signal(1, reset_less=True,
+                              name="assert${}$en".format(src(self.test.src_loc)))
+            self._en.src_loc = self.test.src_loc
+        else:
+            self._en = _en
+
+        if _check is None:
+            self._check = Signal(1, reset_less=True,
+                                 name="assert${}$check".format(src(self.test.src_loc)))
+            self._check.src_loc = self.test.src_loc
+        else:
+            self._check = _check
+
+    def _lhs_signals(self):
+        return ValueSet((self._en, self._check))
+
+    def _rhs_signals(self):
+        return self.test._rhs_signals()
+
+    def __repr__(self):
+        return "(assert {!r})".format(self.test)
+
+
+def src(src_loc):
+    file, line = src_loc
+    return "{}:{}".format(file, line)
+
+
+class Assume(Statement):
+    def __init__(self, test, _en=None, _check=None):
+        self.test = Value.wrap(test)
+        if _en is None:
+            self._en = Signal(1, reset_less=True,
+                              name="assume${}$en".format(src(self.test.src_loc)))
+            self._en.src_loc = self.test.src_loc
+        else:
+            self._en = _en
+
+        if _check is None:
+            self._check = Signal(1, reset_less=True,
+                                 name="assume${}$check".format(src(self.test.src_loc)))
+        else:
+            self._check = _check
+            self._check.src_loc = self.test.src_loc
+
+    def _lhs_signals(self):
+        return ValueSet((self._en, self._check))
+
+    def _rhs_signals(self):
+        return self.test._rhs_signals()
+
+    def __repr__(self):
+        return "(assume {!r})".format(self.test)
 
 
 class Switch(Statement):

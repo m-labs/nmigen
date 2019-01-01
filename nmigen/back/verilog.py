@@ -13,12 +13,14 @@ class YosysError(Exception):
 
 def convert(*args, **kwargs):
     il_text = rtlil.convert(*args, **kwargs)
-    popen = subprocess.Popen([os.getenv("YOSYS", "yosys"), "-q", "-"],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        encoding="utf-8")
-    verilog_text, error = popen.communicate("""
+
+    try:
+        popen = subprocess.Popen([os.getenv("YOSYS", "yosys"), "-q", "-"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            encoding="utf-8")
+        verilog_text, error = popen.communicate("""
 # Convert nMigen's RTLIL to readable Verilog.
 read_ilang <<rtlil
 {}
@@ -33,6 +35,11 @@ write_verilog -norename
 proc
 select -assert-none w:* i:* %a %d o:* %a %ci* %d c:* %co* %a %d n:$* %d
 """.format(il_text))
+    except FileNotFoundError as e:
+        raise RuntimeError('Could not run yosys. '
+            'Either define the YOSYS environment variable, or add yosys '
+            'to your PATH.') from e
+
     if popen.returncode:
         raise YosysError(error.strip())
     else:

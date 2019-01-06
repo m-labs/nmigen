@@ -1,9 +1,9 @@
 Introduction
 ############
 
-`nmigen` is a Python-based tool that aims at automating further the VLSI design process.
+`nMigen` is a Python-based tool that aims at automating further the VLSI design process.
 
-`nmigen` makes it possible to apply modern software concepts such as object-oriented programming and metaprogramming to design hardware. This results in more elegant and easily maintained designs and reduces the incidence of human errors.
+`nMigen` makes it possible to apply modern software concepts such as object-oriented programming and metaprogramming to design hardware. This results in more elegant and easily maintained designs and reduces the incidence of human errors.
 
 .. _background:
 
@@ -47,7 +47,7 @@ Even though the |mm|_ had many successes, it suffers from several limitations st
    
 Enter `nmigen`, a Python toolbox for building complex digital hardware. We could have designed a brand new programming language; but, that would have been reinventing the wheel instead of being able to benefit from Python's rich features and immense library. The price to pay is a slightly cluttered syntax at times when writing descriptions in HDL. However, we believe this is totally acceptable, particularly when compared to VHDL. ;-)
 
-`nmigen` is made up of several related components:
+`nMigen` is made up of several related components:
 
 #. the base language, HDL
 #. a library of small generic cores
@@ -92,15 +92,10 @@ Using ``setup.py`` Globally
 
 Either run the ``setup.py`` installation script or simply set ``PYTHONPATH`` to the root of the `nmigen` source directory.
 
-Anaconda Python Distribution
-============================
-
-`nmigen` is available for the Anaconda Python distribution. The package can be found at at https://anaconda.org/m-labs/nmigen
-
 Explicitly in a ``requirements.txt`` file
 =========================================
 
-`nmigen` can be referenced in a ``requirements.txt`` file (used for ``pip install -r requirements.txt``) via ``-e git+http://github.com/m-labs/nmigen.git#egg=nmigen``. See the pip documentation for more information.
+`nMigen` can be referenced in a ``requirements.txt`` file (used for ``pip install -r requirements.txt``) via ``-e git+http://github.com/m-labs/nmigen.git#egg=nmigen``. See the pip documentation for more information.
 
 Feedback
 ********

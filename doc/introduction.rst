@@ -45,7 +45,7 @@ Even though the |mm|_ had many successes, it suffers from several limitations st
 .. [mthesis] http://m-labs.hk/thesis/thesis.pdf
 .. [mxcell] http://www.xilinx.com/publications/archives/xcell/Xcell77.pdf p30-35
    
-Enter `nmigen`, a Python toolbox for building complex digital hardware. We could have designed a brand new programming language; but, that would have been reinventing the wheel instead of being able to benefit from Python's rich features and immense library. The price to pay is a slightly cluttered syntax at times when writing descriptions in HDL. However, we believe this is totally acceptable, particularly when compared to VHDL. ;-)
+Enter `nMigen`, a Python toolbox for building complex digital hardware. We could have designed a brand new programming language; but, that would have been reinventing the wheel instead of being able to benefit from Python's rich features and immense library. The price to pay is a slightly cluttered syntax at times when writing descriptions in HDL. However, we believe this is totally acceptable, particularly when compared to VHDL. ;-)
 
 `nMigen` is made up of several related components:
 
@@ -54,17 +54,17 @@ Enter `nmigen`, a Python toolbox for building complex digital hardware. We could
 #. a simulator
 #. a build system
 
-Installing `nmigen`
+Installing `nMigen`
 *******************
 
-There are several different methods you can use to install `nmigen`.  Which one works for you will depend on your project's configuration and your development team's needs.
+There are several different methods you can use to install `nMigen`.  Which one works for you will depend on your project's configuration and your development team's needs.
 
-The examples below assume your `nmigen` checkout path is assigned to the ``$NMIGEN_CHECKOUT`` variable.  Your hardware project's path would then be assigned to ``$PROJECT_HOME``.
+The examples below assume your `nMigen` checkout path is assigned to the ``$NMIGEN_CHECKOUT`` variable.  Your hardware project's path would then be assigned to ``$PROJECT_HOME``.
 
 Using Virualenv
 ===============
 
-Inside your hardware project's directory, you'll want to create a virtual environment in which to place ``nmigen`` and its dependencies.
+Inside your hardware project's directory, you'll want to create a virtual environment in which to place ``nMigen`` and its dependencies.
 
 ::
 
@@ -77,7 +77,7 @@ You'll then want to activate it.
 
     $ . env3/bin/activate
 
-Once there, you can then install `nmigen` like so:
+Once there, you can then install `nMigen` like so:
 
 ::
 
@@ -85,12 +85,12 @@ Once there, you can then install `nmigen` like so:
     $ python3 setup.py install
     $ popd
 
-Once this step is complete, every time you (re-)activate your virtualenv, `nmigen` will be available for use.
+Once this step is complete, every time you (re-)activate your virtualenv, `nMigen` will be available for use.
 
 Using ``setup.py`` Globally
 ===========================
 
-Either run the ``setup.py`` installation script or simply set ``PYTHONPATH`` to the root of the `nmigen` source directory.
+Either run the ``setup.py`` installation script or simply set ``PYTHONPATH`` to the root of the `nMigen` source directory.
 
 Explicitly in a ``requirements.txt`` file
 =========================================
@@ -99,4 +99,4 @@ Explicitly in a ``requirements.txt`` file
 
 Feedback
 ********
-Feedback concerning `nmigen` or this manual should be sent to the M-Labs developers' mailing list ``devel`` on lists.m-labs.hk.
+Feedback concerning `nMigen` or this manual should be sent to the M-Labs developers' mailing list ``devel`` on lists.m-labs.hk.

@@ -5,7 +5,7 @@ Migen manual
    :maxdepth: 2
 
    introduction
-.. fhdl
-   simulation
+   hdl
+.. simulation
    synthesis
    reference

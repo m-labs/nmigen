@@ -135,13 +135,18 @@ This is equivalent to the following:
 Operators
 =========
 
-Operators are represented by the ``Operator`` class, which generally should not be used directly. Instead, most HDL objects overload the usual Python logic and arithmetic operators, which allows a much lighter syntax to be used. For example, the expression::
+Operators are represented by the ``Operator`` class, which generally should not be used directly. Instead, most HDL objects overload the usual Python logic and arithmetic operators, which allows a much lighter syntax to be used.
 
-  a * b + c
+Examples 
+~~~~~~~~
+
+The expression::
+
+    a * b + c
 
 is equivalent to::
 
-  Operator("+", [Operator("*", [a, b]), c])
+    Operator("+", [Operator("*", [a, b]), c])
 
 Slices
 ======
@@ -215,115 +220,392 @@ In the previous section, we illustrated how one might use the ``Cat`` constructo
     (8, False)
 
 
-Statements
-**********
-
-Assignment
-==========
-
-Assignments are represented with the ``_Assign`` object. Since using it directly would result in a cluttered syntax, the preferred technique for assignments is to use the ``eq()`` method provided by objects that can have a value assigned to them. They are signals, and their combinations with the slice and concatenation operators.
-As an example, the statement: ::
-
-  a[0].eq(b)
-
-is equivalent to: ::
-
-  _Assign(_Slice(a, 0, 1), b)
-
-If
-==
-
-The ``If`` object takes a first parameter which must be an expression (combination of the ``Constant``, ``Signal``, ``_Operator``, ``_Slice``, etc. objects) representing the condition, then a variable number of parameters representing the statements (``_Assign``, ``If``, ``Case``, etc. objects) to be executed when the condition is verified.
-
-The ``If`` object defines a ``Else()`` method, which when called defines the statements to be executed when the condition is not true. Those statements are passed as parameters to the variadic method.
-
-For convenience, there is also a ``Elif()`` method.
-
-Example: ::
-
-  If(tx_count16 == 0,
-      tx_bitcount.eq(tx_bitcount + 1),
-      If(tx_bitcount == 8,
-          self.tx.eq(1)
-      ).Elif(tx_bitcount == 9,
-          self.tx.eq(1),
-          tx_busy.eq(0)
-      ).Else(
-          self.tx.eq(tx_reg[0]),
-          tx_reg.eq(Cat(tx_reg[1:], 0))
-      )
-  )
-
-Case
-====
-
-The ``Case`` object constructor takes as first parameter the expression to be tested, and a dictionary whose keys are the values to be matched, and values the statements to be executed in the case of a match. The special value ``"default"`` can be used as match value, which means the statements should be executed whenever there is no other match.
-
 Arrays
 ======
 
-The ``Array`` object represents lists of other objects that can be indexed by FHDL expressions. It is explicitly possible to:
+An ``Array`` object represents lists of other objects that can be indexed by HDL expressions. It is explicitly possible to:
 
 * nest ``Array`` objects to create multidimensional tables.
 * list any Python object in a ``Array`` as long as every expression appearing in a module ultimately evaluates to a ``Signal`` for all possible values of the indices. This allows the creation of lists of structured data.
 * use expressions involving ``Array`` objects in both directions (assignment and reading).
 
-For example, this creates a 4x4 matrix of 1-bit signals: ::
+Examples
+~~~~~~~~
 
-  my_2d_array = Array(Array(Signal() for a in range(4)) for b in range(4))
+This creates a 4x4 matrix of 1-bit signals::
 
-You can then read the matrix with (``x`` and ``y`` being 2-bit signals): ::
+    >>> from nmigen import *
+    >>> my_2d_array = Array(Array(Signal() for a in range(4)) for b in range(4))
 
-  out.eq(my_2d_array[x][y])
+You can then read the matrix with (``x`` and ``y`` being 2-bit signals)::
 
-and write it with: ::
+    >>> x = Signal(2)
+    >>> y = Signal(2)
+    >>> out = Signal()
+    >>> out.eq(my_2d_array[x][y])
 
-  my_2d_array[x][y].eq(inp)
+and write it with::
 
-Since they have no direct equivalent in Verilog, ``Array`` objects are lowered into multiplexers and conditional statements before the actual conversion takes place. Such lowering happens automatically without any user intervention.
+    >>> my_2d_array[x][y].eq(inp)
 
-Any out-of-bounds access performed on an ``Array`` object will refer to the last element.
+.. note::
+   Since they have no direct equivalent in Verilog, ``Array`` objects are lowered into multiplexers and conditional statements before the actual conversion takes place. Such lowering happens automatically without any user intervention.
 
-Specials
-********
+.. attention::
+   Any out-of-bounds access performed on an ``Array`` object will refer to the *last element.*
+
+Assignment
+==========
+
+Assignments are represented by the ``Assign`` class. Since using it directly would result in a cluttered syntax, the preferred technique for assignments is to use the ``eq()`` method provided by objects that can have a value assigned to them. They are signals, and their combinations with the slice and concatenation operators.
+
+Examples
+~~~~~~~~
+
+The statement::
+
+    >>> from nmigen import *
+    >>> a = Signal(3)
+    >>> b = Signal()
+    >>> a[0].eq(b)
+    (eq (slice (sig a) 0:1) (sig b))
+
+is equivalent to::
+
+    >>> from nmigen import *
+    >>> from nmigen.hdl.dsl import Assign, Slice
+    >>> a = Signal(3)
+    >>> b = Signal()
+    >>> Assign(Slice(a, 0, 1), b)
+    (eq (slice (sig a) 0:1) (sig b))
+
+Modules
+*******
+
+Before we can look at what kinds of statements the HDL supports, we need to first understand what ``Module`` objects are and how to build them.
+
+Modules play the same role as Verilog modules and VHDL entities. Similarly, they are organized in a tree structure. However, they come into existence very differently than in V*HDL.  This may seem confusing at first; however, it's this difference which gives nMigen its power over V*HDL.
+
+A HDL module is a Python object that derives from the ``Module`` class.  Module objects have a series of methods, described below, which describes the behavioral characteristics of the module.  In addition to these behavioral methods, the HDL module object also possesses attributes which are used to help construct combinatorial and synchronous logic as well.
+
+In essence, a fresh ``Module`` object a blank slate which, by way of various HDL methods described below, is populated with a description of the hardware module you want to synthesize or simulate.
+
+Structure of a Module Generator
+===============================
+
+Let's first look at the hello world of modules so that we can examine what's happening: wrapping a simple OR-gate into a reusable module.
+
+Type the following program into a Python file called ``myor.py``::
+
+    from nmigen import *
+    from nmigen.cli import main
+
+    class MyOR:
+        def __init__(self, width=1):
+            self.a = Signal(width)
+            self.b = Signal(width)
+            self.y = Signal(width)
+
+        def get_fragment(self, platform):
+            m = Module()
+            m.d.comb += self.y.eq(self.a | self.b)
+
+            return m.lower(platform)
+
+    if __name__ == '__main__':
+        orGate = MyOR()
+        main(orGate, ports=[orGate.a, orGate.b, orGate.y])
+
+This program works in two phases:
+
+#. When the object is first instantiated, the interface to the module is declared in the ``__init__`` constructor.  Observe that we can parameterize this module via the keyword argument ``width``, which we'll illustrate later.
+
+    .. note::
+        After construction, the module does not yet properly exist!  The ``MyOR`` class is not the module, but rather the module's *generator*.
+
+#. When it's time to reify the circuit into a Verilog module, the ``get_fragment`` method of the generator class is invoked by nMigen.  This is where we actually *generate* the module given what we already know about their configuration from the constructor above.
+
+    .. note::
+        You might be familiar with Migen, the predecessor to nMigen, where modules are typically subclassed from ``Module``.  This is not the case with nMigen!  ``Module`` objects are frequently instantiated as-is, without subclassing of any kind.
+
+Notice that this Python file happens to be *executable* as well as importable.  You can enter the following at the command line to get help::
+
+    $ python3 myor.py --help
+
+As of this writing, the results should look something like::
+
+   usage: myor.py [-h] {generate,simulate} ...
+
+   positional arguments:
+     {generate,simulate}
+       generate           generate RTLIL or Verilog from the design
+       simulate           simulate the design
+
+   optional arguments:
+     -h, --help           show this help message and exit
+
+Simulation will be discussed in a later section.  For now, let's create the corresponding Verilog output from our module definition::
+
+    $ python3 myor.py generate myor.v
+
+If you examine the results, it should look something like this::
+
+   /* Generated by Yosys 0.7+653 (git sha1 ddc1761f, clang 6.0.1 -fPIC -Os) */
+
+   (* top =  1  *)
+   (* generator = "nMigen" *)
+   module top(b, y, a);
+     wire \$1 ;
+     (* src = "myor.py:6" *)
+     input a;
+     (* src = "myor.py:7" *)
+     input b;
+     (* src = "myor.py:8" *)
+     output y;
+     (* src = "myor.py:8" *)
+     reg \y$next ;
+     assign \$1  = a | (* src = "myor.py:12" *) b;
+     always @* begin
+       \y$next  = 1'h0;
+       \y$next  = \$1 ;
+     end
+     assign y = \y$next ;
+   endmodule
+
+Some things to note:
+
+#. nMigen introduces a lot of helpful back-references automatically for you, so that when you find yourself debugging a circuit, you can easily jump back to the corresponding Python sources.
+#. nMigen *infers* whether a signal is an input or an output.
+#. nMigen tailored the module to the needs of its invokation.
+
+Remember that the *gen* in nMigen stands for *generator*.  You are not describing a circuit with nMigen; you are instead describing a *circuit generator.*  We can illustrate this by now generating an 8-input OR-gate Verilog module.  Make the following changes to the ``myor.py`` file::
+
+    if __name__ == '__main__':
+        orGate = MyOR(width=8)
+        main(orGate, ports=[orGate.a, orGate.b, orGate.y])
+
+Now, if you re-generate the Verilog module per the previous steps, you'll find the following changes in the output (metadata elided for clarity)::
+
+   wire [7:0] \$1 ;
+   input [7:0] a;
+   input [7:0] b;
+   output [7:0] y;
+
+Notice that the signals now are properly sized.
+
+.. note::
+    That most circuits and their respective generators tends to closely relate to each other is merely a happy coincidence.  You'll see later that this doesn't need to always be the case.
+
+Statements
+**********
+
+Now that we know how to construct a module, and even how to perform basic parameterization, we can explore various module statement methods to tailor generated modules to specific needs.
+
+Combinatorial statements
+========================
+
+A combinatorial statement is a statement that is executed whenever one of its inputs changes.
+
+Combinatorial statements are added to a module by using the ``d.comb`` special attribute. Like most module special attributes, it must be accessed using the ``+=`` increment operator, and either a single statement, a tuple of statements or a list of statements can appear on the right hand side.
+
+We've seen an example in the previous program listing, so we'll elide any further illustration here.
+
+Synchronous statements
+======================
+
+A synchronous statements is a statement that is executed at each edge of some clock signal.
+
+They are added to a module by using the ``d.sync`` special attribute, which has the same properties as the ``d.comb`` attribute.
+
+If, Else, Elif
+==============
+
+The ``If`` method is used to make a binary decision.  The parameter to ``If`` is the *predicate* to test.  The *consequent* of the statement appears inside the body of a ``with`` statement.  The *alternate* can optionally be specified in a separate ``with`` statement using the ``Else`` method.
+
+For instance, we can express a simple two-input multiplexor like so::
+
+    class Mux:
+        def __init__(self):
+            self.a = Signal()
+            self.b = Signal()
+            self.s = Signal()
+            self.y = Signal()
+
+        def get_fragment(self, platform):
+            m = Module()
+
+            with m.If(self.s):
+                m.d.comb += self.y.eq(self.a)
+            with m.Else():
+                m.d.comb += self.y.eq(self.b)
+
+            return m.lower(platform)
+
+If you need to perform a multi-way decision, you can use the ``Elif`` method as a shortcut for an else-if construct::
+
+   class Mux:
+      def __init__(self):
+            self.a = Signal()
+            self.b = Signal()
+            self.c = Signal()
+            self.s = Signal(max=3)
+            self.y = Signal()
+
+        def get_fragment(self, platform):
+            m = Module()
+
+            with m.If(self.s == 0):
+                m.d.comb += self.y.eq(self.a)
+            with m.Elif(self.s == 1):
+                m.d.comb += self.y.eq(self.b)
+            with m.Else():
+                m.d.comb += self.y.eq(self.c)
+
+            return m.lower(platform)
+
+``If``, ``Else``, and ``Elif`` bodies can nest as well::
+
+    with m.If(self.tx_count16 == 0):
+        self.tx_bitcount.eq(self.tx_bitcount + 1)
+        with m.If(self.tx_bitcount == 8):
+            self.tx.eq(1)
+        with m.Elif(self.tx_bitcount == 9):
+            self.tx.eq(1)
+            self.tx_busy.eq(0)
+        with m.Else():
+            self.tx.eq(self.tx_reg[0])
+            self.tx_reg.eq(Cat(self.tx_reg[1:], 0))
+
+
+Switch, Case
+============
+
+If you find that you're writing the same basic form of predicate over and over again in a sequence of ``If`` and ``Elif`` statements, varying only by what a signal is compared against, then a ``Switch``/``Case`` construct might be a better solution.
+
+The parameter to ``Switch`` specifies the signal which will be compared.  Each parameter to ``Case`` specifies the value against which it'll be compared.  The body of the successfully matching ``with`` predicate, its consequent, will take effect.
+
+Consider this rewrite of the ``Mux`` class from the previous section::
+
+   class Mux:
+      def __init__(self):
+            self.a = Signal()
+            self.b = Signal()
+            self.c = Signal()
+            self.s = Signal(max=3)
+            self.y = Signal()
+
+        def get_fragment(self, platform):
+            m = Module()
+
+            with m.Switch(self.s):
+                with m.Case(0):
+                    m.d.comb += self.y.eq(self.a)
+                with m.Case(1):
+                    m.d.comb += self.y.eq(self.b)
+                with m.Case():
+                    m.d.comb += self.y.eq(self.c)
+
+            return m.lower(platform)
+
+.. note::
+    A call to ``Case()``, with no parameter given, represents the *default* case.
+
+What if a selector signal is already pre-decoded into one-hot signals?  We can use ``Case`` in that context as well::
+
+   class Mux:
+      def __init__(self):
+            self.a = Signal()
+            self.b = Signal()
+            self.c = Signal()
+            self.s = Signal(3)
+            self.y = Signal()
+
+        def get_fragment(self, platform):
+            m = Module()
+
+            with m.Switch(self.s):
+                with m.Case("--1"):
+                    m.d.comb += self.y.eq(self.a)
+                with m.Case("-1-"):
+                    m.d.comb += self.y.eq(self.b)
+                with m.Case("1--"):
+                    m.d.comb += self.y.eq(self.c)
+
+            return m.lower(platform)
+
+In this form, each parameter to ``Case`` must have a length which precisely matches the length of the variable you're switching against.
+
+.. attention::
+    In the section on Slices, we discussed how slice notation always goes from LSB (inclusive) to MSB (exclusive; e.g., ``LSB:MSB``).  This convention was held for the ``Cat`` and ``Repl`` functions as well, such that given any sequence of signals or constants, the left-most value corresponded to the least significant bit.
+    
+    However, if you look at the generated Verilog for the above definition of ``Mux``, you'll find that when using strings to specify don't care bits, the **right-most** digit corresponds to the least significant bit, not the left-most, exactly as you would expect when writing binary digits on paper!  Take care!
+
+
+Miscellaneous
+*************
 
 Tri-state I/O
 =============
 
-A triplet (O, OE, I) of one-way signals defining a tri-state I/O port is represented by the ``TSTriple`` object. Such objects are only containers for signals that are intended to be later connected to a tri-state I/O buffer, and cannot be used as module specials. Such objects, however, should be kept in the design as long as possible as they allow the individual one-way signals to be manipulated in a non-ambiguous way.
+As of this writing, tri-state I/O is not explicitly supported by nMigen.  (See `Github issue #6`_.)  For now, you'll need to manually elaborate tri-state I/O signals as distinct inputs, outputs, and output enables.
 
-The object that can be used in as a module special is ``Tristate``, and it behaves exactly like an instance of a tri-state I/O buffer that would be defined as follows: ::
-
-  Instance("Tristate",
-    io_target=target,
-    i_o=o,
-    i_oe=oe,
-    o_i=i
-  )
-
-Signals ``target``, ``o`` and ``i`` can have any width, while ``oe`` is 1-bit wide. The ``target`` signal should go to a port and not be used elsewhere in the design. Like modern FPGA architectures, Migen does not support internal tri-states.
-
-A ``Tristate`` object can be created from a ``TSTriple`` object by calling the ``get_tristate`` method.
-
-By default, Migen emits technology-independent behavioral code for a tri-state buffer. If a specific code is needed, the tristate handler can be overriden using the appropriate parameter of the V*HDL conversion function.
+.. _`Github issue #6`: https://github.com/m-labs/nmigen/issues/6
 
 Instances
 =========
 
-Instance objects represent the parametrized instantiation of a V*HDL module, and the connection of its ports to FHDL signals. They are useful in a number of cases:
+Instance objects represent the parametrized instantiation of a V*HDL module, and the connection of its ports to HDL signals. They are useful in a number of cases:
 
 * Reusing legacy or third-party V*HDL code.
 * Using special FPGA features (DCM, ICAP, ...).
-* Implementing logic that cannot be expressed with FHDL (e.g. latches).
-* Breaking down a Migen system into multiple sub-systems.
+* Implementing logic that cannot be expressed with nMigen HDL (e.g. latches).
+* Breaking down a nMigen system into multiple sub-systems.
 
 The instance object constructor takes the type (i.e. name of the instantiated module) of the instance, then multiple parameters describing how to connect and parametrize the instance.
 
-These parameters can be:
+Suppose we wish to instantiate some device which uses an SPI interface to provide random numbers.  We might have code such as the following::
 
-* ``Instance.Input``, ``Instance.Output`` or ``Instance.InOut`` to describe signal connections with the instance. The parameters are the name of the port at the instance, and the FHDL expression it should be connected to.
-* ``Instance.Parameter`` sets a parameter (with a name and value) of the instance.
-* ``Instance.ClockPort`` and ``Instance.ResetPort`` are used to connect clock and reset signals to the instance. The only mandatory parameter is the name of the port at the instance. Optionally, a clock domain name can be specified, and the ``invert`` option can be used to interface to those modules that require a 180-degree clock or a active-low reset.
+    from nmigen import *
+    from nmigen.cli import main
+
+    class RNG:
+        def __init__(self, speed=10000000, seed=1726412):
+            self.miso = Signal()
+            self.mosi = Signal()
+            self.ss = Signal()
+            self.clk = Signal()
+
+            self.speed = speed
+            self.default_seed = seed
+
+        def get_fragment(self, platform):
+            m = Module()
+            m.submodules.rng = Instance("RandomNumberGen",
+                p_DEFAULT_SEED = self.default_seed,
+                p_SPI_SPEED = self.speed,
+
+                i_mosi = self.mosi,
+                o_miso = self.miso,
+                i_ss = self.ss,
+                i_clk = self.clk,
+            )
+            return m.lower(platform)
+
+    if __name__ == '__main__':
+        m = RNG()
+        main(m, ports=[m.miso, m.mosi, m.ss, m.clk])
+
+The first parameter to ``Instance`` is the name of the Verilog, VHDL, et. al. module to instantiate.
+
+All subsequent keyword arguments are named according to a convention which nMigen uses to properly instantiate and infer signal directions:
+
+* All parameters that start with ``p_`` are module instance parameters.  For example, if you example the Verilog output for the RNG module generator above, you'll see the ``.DEFAULT_SEED`` and ``.SPI_SPEED`` parameter provided.
+* All parameters that start with ``i_`` are *inputs to the instantiated module.*  Therefore, they will also be inputs to the module thus generated above.
+* All parameters that start with ``o_`` are *outputs from the instantiated module.*  Therefore, they're also outputs from the generated module as well.
+* All parameters that start with ``io_`` are **bidirectional**.  For Verilog, this means that the signal is marked ``inout``.
+
+.. note::
+    Observe that no explicit support for clock or reset ports is provided at this time.  The best way to pass them along is to assign clock and reset explicitly as inputs to the instantiated module.
 
 Memories
 ========
@@ -353,41 +635,6 @@ Options to ``get_port`` are:
 * ``clock_domain`` (default: ``"sys"``): the clock domain used for reading and writing from this port.
 
 Migen generates behavioural V*HDL code that should be compatible with all simulators and, if the number of ports is <= 2, most FPGA synthesizers. If a specific code is needed, the memory handler can be overriden using the appropriate parameter of the V*HDL conversion function.
-
-Modules
-*******
-
-Modules play the same role as Verilog modules and VHDL entities. Similarly, they are organized in a tree structure. A FHDL module is a Python object that derives from the ``Module`` class. This class defines special attributes to be used by derived classes to describe their logic. They are explained below.
-
-Combinatorial statements
-========================
-
-A combinatorial statement is a statement that is executed whenever one of its inputs changes.
-
-Combinatorial statements are added to a module by using the ``comb`` special attribute. Like most module special attributes, it must be accessed using the ``+=`` incrementation operator, and either a single statement, a tuple of statements or a list of statements can appear on the right hand side.
-
-For example, the module below implements a OR gate: ::
-
-  class ORGate(Module):
-    def __init__(self):
-      self.a = Signal()
-      self.b = Signal()
-      self.x = Signal()
-
-      ###
-
-      self.comb += self.x.eq(self.a | self.b)
-
-To improve code readability, it is recommended to place the interface of the module at the beginning of the ``__init__`` function, and separate it from the implementation using three hash signs.
-
-Synchronous statements
-======================
-
-A synchronous statements is a statement that is executed at each edge of some clock signal.
-
-They are added to a module by using the ``sync`` special attribute, which has the same properties as the ``comb`` attribute.
-
-The ``sync`` special attribute also has sub-attributes that correspond to abstract clock domains. For example, to add a statement to the clock domain named ``foo``, one would write ``self.sync.foo += statement``. The default clock domain is ``sys`` and writing ``self.sync += statement`` is equivalent to writing ``self.sync.sys += statement``.
 
 Submodules and specials
 =======================

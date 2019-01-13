@@ -618,23 +618,21 @@ A memory object has the following parameters:
 * The depth, which represents the number of words in the memory.
 * An optional list of integers used to initialize the memory.
 
-To access the memory in hardware, ports can be obtained by calling the ``get_port`` method. A port always has an address signal ``a`` and a data read signal ``dat_r``. Other signals may be available depending on the port's configuration.
+To access the memory in hardware, ports can be obtained by calling the ``read_port`` and ``write_port`` methods. A port always has an address signal ``addr`` and a data read signal ``dat_r``. Other signals may be available depending on the port's configuration.
 
-Options to ``get_port`` are:
+Options to ``read_port`` are:
 
-* ``write_capable`` (default: ``False``): if the port can be used to write to the memory. This creates an additional ``we`` signal.
-* ``async_read`` (default: ``False``): whether reads are asychronous (combinatorial) or synchronous (registered).
-* ``has_re`` (default: ``False``): adds a read clock-enable signal ``re`` (ignored for asychronous ports).
-* ``we_granularity`` (default: ``0``): if non-zero, writes of less than a memory word can occur. The width of the ``we`` signal is increased to act as a selection signal for the sub-words.
-* ``mode`` (default: ``WRITE_FIRST``, ignored for aynchronous ports).  It can be:
+* ``synchronous`` (default: ``True``): whether reads are asychronous (combinatorial) or synchronous (registered).
+* ``transparent`` (default: ``True``): whether the outputs track the current state of the addressed memory cell (transparent) or are latched in a sample-and-hold flip-flop arrangement (non-transparent).
+* ``domain`` (default: ``sync``): the clock domain used for reading from this port.
 
-  * ``READ_FIRST``: during a write, the previous value is read.
-  * ``WRITE_FIRST``: the written value is returned.
-  * ``NO_CHANGE``: the data read signal keeps its previous value on a write.
+Options to ``write_port`` are:
 
-* ``clock_domain`` (default: ``"sys"``): the clock domain used for reading and writing from this port.
+* ``domain`` (default: ``sync``): the clock domain used for writing to this port.
+* ``priority`` (default: 0): if a read and a write were to occur at the same time, the priority selects which operation logically happens first.  If 0, a concurrent read will respect the previous value.  Otherwise, the value currently being written.  (TODO: Confirm this.)
+* ``granularity`` (default: memory width): the width of the smallest addressible unit of the memory.  The address input selects a full word to write, while individual enables selects which lane within the word is to receive updated information.  The width of the ``we`` signal is increased to act as a selection signal for each lane.
 
-Migen generates behavioural V*HDL code that should be compatible with all simulators and, if the number of ports is <= 2, most FPGA synthesizers. If a specific code is needed, the memory handler can be overriden using the appropriate parameter of the V*HDL conversion function.
+(TODO: Confirm this.)  nMigen generates behavioural V*HDL code that should be compatible with all simulators and, if the number of ports is <= 2, most FPGA synthesizers. If a specific code is needed, the memory handler can be overriden using the appropriate parameter of the V*HDL conversion function.
 
 Submodules and specials
 =======================

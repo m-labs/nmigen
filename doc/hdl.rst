@@ -634,6 +634,37 @@ Options to ``write_port`` are:
 
 (TODO: Confirm this.)  nMigen generates behavioural V*HDL code that should be compatible with all simulators and, if the number of ports is <= 2, most FPGA synthesizers. If a specific code is needed, the memory handler can be overriden using the appropriate parameter of the V*HDL conversion function.
 
+Examples
+~~~~~~~~
+
+This example illustrates a synchronous register file, 16 deep, 8-bits wide::
+
+    from nmigen import *
+    from nmigen.cli import main
+
+
+    class RegisterFile:
+        def __init__(self):
+            self.adr   = Signal(4)
+            self.dat_r = Signal(8)
+            self.dat_w = Signal(8)
+            self.we    = Signal()
+            self.mem   = Memory(width=8, depth=16, init=[0xaa, 0x55])
+
+        def get_fragment(self, platform):
+            m = Module()
+            m.submodules.rdport = rdport = self.mem.read_port()
+            m.submodules.wrport = wrport = self.mem.write_port()
+            m.d.comb += [
+                rdport.addr.eq(self.adr),
+                self.dat_r.eq(rdport.data),
+                wrport.addr.eq(self.adr),
+                wrport.data.eq(self.dat_w),
+                wrport.en.eq(self.we),
+            ]
+            return m.lower(platform)
+
+
 Submodules and specials
 =======================
 

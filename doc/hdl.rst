@@ -15,13 +15,13 @@ Expressions
 Constants
 =========
 
-The ``Constant`` object represents a constant, HDL-literal integer. It behaves like specifying integers and booleans but also supports slicing and can have a bit width or signedness different from what is implied by the value it represents.
+The ``Const`` object represents a constant, HDL-literal integer. It behaves like specifying integers and booleans but also supports slicing and can have a bit width or signedness different from what is implied by the value it represents.
 
 ``True`` and ``False`` are interpreted as 1 and 0, respectively.
 
 Negative integers are explicitly supported. As with |MyHDL-countin|_, arithmetic operations return their natural results.
 
-To lighten the syntax, assignments and operators automatically wrap Python integers and booleans into ``Constant``. Additionally, ``Constant`` is aliased to ``C``.
+To lighten the syntax, assignments and operators automatically wrap Python integers and booleans into ``Const``. Additionally, ``Const`` is aliased to ``C``.
 
 Examples
 ~~~~~~~~
@@ -40,7 +40,7 @@ We can also use constants in arithmetic and logical operations.
     >>> a.eq(a + 1)
     (eq (sig a) (+ (sig a) (const 1'd1))
 
-You can make use of the ``Constant`` or ``C`` constructor to directly encode constants as well.
+You can make use of the ``Const`` or ``C`` constructor to directly encode constants as well.
 
     >>> from nmigen import *
     >>> a = Signal()
@@ -53,7 +53,7 @@ You can make use of the ``Constant`` or ``C`` constructor to directly encode con
 Signal
 ======
 
-The Signal object represents a value that is expected to change in the circuit. It does exactly what Verilog's *wire* and *reg* and VHDL's *signal* keywords do.
+The Signal object represents a value that is expected to change in the circuit. It does exactly what Verilog's *wire* and *reg*, SystemVerilog's *logic*, and VHDL's *signal* keywords do.
 
 The main point of the Signal object is that it is identified by its Python ID (as returned by the :py:func:`id` function), and nothing else. It is the responsibility of the V*HDL back-end to establish an injective mapping between Python IDs and the V*HDL namespace. It should perform name mangling to ensure this. The consequence of this is that signal objects can safely become members of arbitrary Python classes, or be passed as parameters to functions or methods that generate logic involving them.
 
@@ -326,7 +326,7 @@ This program works in two phases:
 #. When it's time to reify the circuit into a Verilog module, the ``get_fragment`` method of the generator class is invoked by nMigen.  This is where we actually *generate* the module given what we already know about their configuration from the constructor above.
 
     .. note::
-        You might be familiar with Migen, the predecessor to nMigen, where modules are typically subclassed from ``Module``.  This is not the case with nMigen!  ``Module`` objects are frequently instantiated as-is, without subclassing of any kind.
+        You might be familiar with Migen, the predecessor to nMigen, where modules are typically subclassed from ``Module``.  This is not the case with nMigen!  ``Module`` objects are *always* instantiated as-is, without subclassing of any kind.
 
 Notice that this Python file happens to be *executable* as well as importable.  You can enter the following at the command line to get help::
 
@@ -618,21 +618,21 @@ A memory object has the following parameters:
 * The depth, which represents the number of words in the memory.
 * An optional list of integers used to initialize the memory.
 
-To access the memory in hardware, ports can be obtained by calling the ``read_port`` and ``write_port`` methods. A port always has an address signal ``addr`` and a data read signal ``dat_r``. Other signals may be available depending on the port's configuration.
+To access the memory in hardware, ports can be obtained by calling the ``read_port`` and ``write_port`` methods. A port always has an address signal ``addr`` and a data read signal ``data``, whose polarity depends on whether it is a read or write port. Other signals may be available depending on the port's configuration.
 
 Options to ``read_port`` are:
 
 * ``synchronous`` (default: ``True``): whether reads are asychronous (combinatorial) or synchronous (registered).
-* ``transparent`` (default: ``True``): whether the outputs track the current state of the addressed memory cell (transparent) or are latched in a sample-and-hold flip-flop arrangement (non-transparent).
+* ``transparent`` (default: ``True``): whether the ``data`` port tracks the current state of the addressed memory cell (non-transparent) or, if a concurrent write is in progress, the value being written (transparent).
 * ``domain`` (default: ``sync``): the clock domain used for reading from this port.
 
 Options to ``write_port`` are:
 
 * ``domain`` (default: ``sync``): the clock domain used for writing to this port.
-* ``priority`` (default: 0): if a read and a write were to occur at the same time, the priority selects which operation logically happens first.  If 0, a concurrent read will respect the previous value.  Otherwise, the value currently being written.  (TODO: Confirm this.)
+* ``priority`` (default: 0): a memory may have multiple write ports.  If more than one write port has a write in progress on any given cycle, the memory will commit the data from the highest priority port.
 * ``granularity`` (default: memory width): the width of the smallest addressible unit of the memory.  The address input selects a full word to write, while individual enables selects which lane within the word is to receive updated information.  The width of the ``we`` signal is increased to act as a selection signal for each lane.
 
-(TODO: Confirm this.)  nMigen generates behavioural V*HDL code that should be compatible with all simulators and, if the number of ports is <= 2, most FPGA synthesizers. If a specific code is needed, the memory handler can be overriden using the appropriate parameter of the V*HDL conversion function.
+nMigen generates behavioural V*HDL code that should be compatible with all simulators and, if the number of ports is <= 2, most FPGA synthesizers.
 
 Examples
 ~~~~~~~~

@@ -519,6 +519,15 @@ class FragmentHierarchyConflictTestCase(FHDLTestCase):
         self.assertEqual(self.f1.subfragments, [])
 
 
+class FragmentGetBadInputTestCase(FHDLTestCase):
+    def test_input_none(self):
+        with self.assertRaises(AttributeError,
+                msg="'NoneType' object has no attribute 'elaborate' or 'get_fragment'."
+                " Did you remember to return a Module object from each user-defined 'elaborate'"
+                " or 'get_fragment' method?"):
+            Fragment.get(None, None)
+
+
 class InstanceTestCase(FHDLTestCase):
     def setUp_cpu(self):
         self.rst = Signal()

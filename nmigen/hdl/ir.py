@@ -19,6 +19,10 @@ class Fragment:
         if isinstance(obj, Fragment):
             return obj
         if not hasattr(obj, "elaborate"): # :deprecated:
+            if not hasattr(obj, "get_fragment"): # :deprecated:
+                raise AttributeError("'{}' object has no attribute 'elaborate' or 'get_fragment'."
+                                     " Did you remember to return a Module object from each user-defined 'elaborate' or 'get_fragment' method?"
+                                     .format(type(obj).__name__))
             return Fragment.get(obj.get_fragment(platform), platform)
         return Fragment.get(obj.elaborate(platform), platform)
 

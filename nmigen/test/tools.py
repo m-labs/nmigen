@@ -1,9 +1,16 @@
+import os
 import re
+import shutil
+import subprocess
+import textwrap
+import traceback
 import unittest
 import warnings
 from contextlib import contextmanager
 
 from ..hdl.ast import *
+from ..hdl.ir import *
+from ..back import rtlil
 
 
 __all__ = ["FHDLTestCase"]
@@ -12,10 +19,12 @@ __all__ = ["FHDLTestCase"]
 class FHDLTestCase(unittest.TestCase):
     def assertRepr(self, obj, repr_str):
         obj = Statement.wrap(obj)
-        repr_str = re.sub(r"\s+",   " ",  repr_str)
-        repr_str = re.sub(r"\( (?=\()", "(", repr_str)
-        repr_str = re.sub(r"\) (?=\))", ")", repr_str)
-        self.assertEqual(repr(obj), repr_str.strip())
+        def prepare_repr(repr_str):
+            repr_str = re.sub(r"\s+",   " ",  repr_str)
+            repr_str = re.sub(r"\( (?=\()", "(", repr_str)
+            repr_str = re.sub(r"\) (?=\))", ")", repr_str)
+            return repr_str.strip()
+        self.assertEqual(prepare_repr(repr(obj)), prepare_repr(repr_str))
 
     @contextmanager
     def assertRaises(self, exception, msg=None):
@@ -41,3 +50,52 @@ class FHDLTestCase(unittest.TestCase):
         self.assertEqual(warns[0].category, category)
         if msg is not None:
             self.assertEqual(str(warns[0].message), msg)
+
+    def assertFormal(self, spec, mode="bmc", depth=1):
+        caller, *_ = traceback.extract_stack(limit=2)
+        spec_root, _ = os.path.splitext(caller.filename)
+        spec_dir = os.path.dirname(spec_root)
+        spec_name = "{}_{}".format(
+            os.path.basename(spec_root).replace("test_", "spec_"),
+            caller.name.replace("test_", "")
+        )
+
+        # The sby -f switch seems not fully functional when sby is reading from stdin.
+        if os.path.exists(os.path.join(spec_dir, spec_name)):
+            shutil.rmtree(os.path.join(spec_dir, spec_name))
+
+        if mode == "hybrid":
+            # A mix of BMC and k-induction, as per personal communication with Clifford Wolf.
+            script = "setattr -unset init w:* a:nmigen.sample_reg %d"
+            mode   = "bmc"
+        else:
+            script = ""
+
+        config = textwrap.dedent("""\
+        [options]
+        mode {mode}
+        depth {depth}
+        wait on
+
+        [engines]
+        smtbmc
+
+        [script]
+        read_ilang top.il
+        prep
+        {script}
+
+        [file top.il]
+        {rtlil}
+        """).format(
+            mode=mode,
+            depth=depth,
+            script=script,
+            rtlil=rtlil.convert(Fragment.get(spec, platform="formal"))
+        )
+        with subprocess.Popen(["sby", "-f", "-d", spec_name], cwd=spec_dir,
+                              universal_newlines=True,
+                              stdin=subprocess.PIPE, stdout=subprocess.PIPE) as proc:
+            stdout, stderr = proc.communicate(config)
+            if proc.returncode != 0:
+                self.fail("Formal verification failed:\n" + stdout)

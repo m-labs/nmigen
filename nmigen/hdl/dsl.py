@@ -1,17 +1,22 @@
 from collections import OrderedDict, namedtuple
 from collections.abc import Iterable
 from contextlib import contextmanager
+import warnings
 
-from ..tools import flatten, bits_for
+from ..tools import flatten, bits_for, deprecated
 from .ast import *
 from .ir import *
 from .xfrm import *
 
 
-__all__ = ["Module", "SyntaxError"]
+__all__ = ["Module", "SyntaxError", "SyntaxWarning"]
 
 
 class SyntaxError(Exception):
+    pass
+
+
+class SyntaxWarning(Warning):
     pass
 
 
@@ -195,7 +200,7 @@ class Module(_ModuleBuilderRoot):
     @contextmanager
     def Switch(self, test):
         self._check_context("Switch", context=None)
-        switch_data = self._set_ctrl("Switch", {"test": test, "cases": OrderedDict()})
+        switch_data = self._set_ctrl("Switch", {"test": Value.wrap(test), "cases": OrderedDict()})
         try:
             self._ctrl_context = "Switch"
             self.domain._depth += 1
@@ -211,15 +216,22 @@ class Module(_ModuleBuilderRoot):
         switch_data = self._get_ctrl("Switch")
         if value is None:
             value = "-" * len(switch_data["test"])
-        if isinstance(value, str) and len(switch_data["test"]) != len(value):
+        if isinstance(value, str) and len(value) != len(switch_data["test"]):
             raise SyntaxError("Case value '{}' must have the same width as test (which is {})"
                               .format(value, len(switch_data["test"])))
+        omit_case = False
+        if isinstance(value, int) and bits_for(value) > len(switch_data["test"]):
+            warnings.warn("Case value '{:b}' is wider than test (which has width {}); "
+                          "comparison will never be true"
+                          .format(value, len(switch_data["test"])), SyntaxWarning, stacklevel=3)
+            omit_case = True
         try:
             _outer_case, self._statements = self._statements, []
             self._ctrl_context = None
             yield
             self._flush_ctrl()
-            switch_data["cases"][value] = self._statements
+            if not omit_case:
+                switch_data["cases"][value] = self._statements
         finally:
             self._ctrl_context = "Switch"
             self._statements = _outer_case
@@ -341,6 +353,7 @@ class Module(_ModuleBuilderRoot):
                     "Only assignments, asserts, and assumes may be appended to d.{}"
                     .format(domain_name(domain)))
 
+            assign = SampleDomainInjector(domain)(assign)
             for signal in assign._lhs_signals():
                 if signal not in self._driving:
                     self._driving[signal] = domain
@@ -354,9 +367,15 @@ class Module(_ModuleBuilderRoot):
             self._statements.append(assign)
 
     def _add_submodule(self, submodule, name=None):
-        if not hasattr(submodule, "get_fragment"):
-            raise TypeError("Trying to add '{!r}', which does not implement .get_fragment(), as "
-                            "a submodule".format(submodule))
+        if not hasattr(submodule, "elaborate"):
+            if hasattr(submodule, "get_fragment"): # :deprecated:
+                warnings.warn("Adding '{!r}', which implements .get_fragment() but not "
+                              ".elaborate(), as a submodule. .get_fragment() is deprecated, "
+                              "and .elaborate() should be provided instead.".format(submodule),
+                              DeprecationWarning, stacklevel=2)
+            else:
+                raise TypeError("Trying to add '{!r}', which does not implement .elaborate(), as "
+                                "a submodule".format(submodule))
         self._submodules.append((submodule, name))
 
     def _add_domain(self, cd):
@@ -366,17 +385,24 @@ class Module(_ModuleBuilderRoot):
         while self._ctrl_stack:
             self._pop_ctrl()
 
-    def lower(self, platform):
+    @deprecated("`m.get_fragment(...)` is deprecated; use `m` instead")
+    def get_fragment(self, platform): # :deprecated:
+        return self.elaborate(platform)
+
+    @deprecated("`m.lower(...)` is deprecated; use `m` instead")
+    def lower(self, platform): # :deprecated:
+        return self.elaborate(platform)
+
+    def elaborate(self, platform):
         self._flush()
 
         fragment = Fragment()
         for submodule, name in self._submodules:
-            fragment.add_subfragment(submodule.get_fragment(platform), name)
-        fragment.add_statements(self._statements)
+            fragment.add_subfragment(Fragment.get(submodule, platform), name)
+        statements = SampleDomainInjector("sync")(self._statements)
+        fragment.add_statements(statements)
         for signal, domain in self._driving.items():
             fragment.add_driver(signal, domain)
         fragment.add_domains(self._domains)
         fragment.generated.update(self._generated)
         return fragment
-
-    get_fragment = lower

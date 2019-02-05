@@ -14,6 +14,7 @@ __all__ = ["ValueVisitor", "ValueTransformer",
            "StatementVisitor", "StatementTransformer",
            "FragmentTransformer",
            "DomainRenamer", "DomainLowerer",
+           "SampleDomainInjector", "SampleLowerer",
            "SwitchCleaner", "LHSGroupAnalyzer", "LHSGroupFilter",
            "ResetInserter", "CEInserter"]
 
@@ -21,6 +22,14 @@ __all__ = ["ValueVisitor", "ValueTransformer",
 class ValueVisitor(metaclass=ABCMeta):
     @abstractmethod
     def on_Const(self, value):
+        pass # :nocov:
+
+    @abstractmethod
+    def on_AnyConst(self, value):
+        pass # :nocov:
+
+    @abstractmethod
+    def on_AnySeq(self, value):
         pass # :nocov:
 
     @abstractmethod
@@ -63,12 +72,20 @@ class ValueVisitor(metaclass=ABCMeta):
     def on_ArrayProxy(self, value):
         pass # :nocov:
 
+    @abstractmethod
+    def on_Sample(self, value):
+        pass # :nocov:
+
     def on_unknown_value(self, value):
         raise TypeError("Cannot transform value '{!r}'".format(value)) # :nocov:
 
     def on_value(self, value):
         if type(value) is Const:
             new_value = self.on_Const(value)
+        elif type(value) is AnyConst:
+            new_value = self.on_AnyConst(value)
+        elif type(value) is AnySeq:
+            new_value = self.on_AnySeq(value)
         elif type(value) is Signal:
             new_value = self.on_Signal(value)
         elif type(value) is Record:
@@ -90,6 +107,8 @@ class ValueVisitor(metaclass=ABCMeta):
             new_value = self.on_Repl(value)
         elif type(value) is ArrayProxy:
             new_value = self.on_ArrayProxy(value)
+        elif type(value) is Sample:
+            new_value = self.on_Sample(value)
         else:
             new_value = self.on_unknown_value(value)
         if isinstance(new_value, Value):
@@ -102,6 +121,12 @@ class ValueVisitor(metaclass=ABCMeta):
 
 class ValueTransformer(ValueVisitor):
     def on_Const(self, value):
+        return value
+
+    def on_AnyConst(self, value):
+        return value
+
+    def on_AnySeq(self, value):
         return value
 
     def on_Signal(self, value):
@@ -135,6 +160,9 @@ class ValueTransformer(ValueVisitor):
         return ArrayProxy([self.on_value(elem) for elem in value._iter_as_values()],
                           self.on_value(value.index))
 
+    def on_Sample(self, value):
+        return Sample(self.on_value(value.value), value.clocks, value.domain)
+
 
 class StatementVisitor(metaclass=ABCMeta):
     @abstractmethod
@@ -162,18 +190,21 @@ class StatementVisitor(metaclass=ABCMeta):
 
     def on_statement(self, stmt):
         if type(stmt) is Assign:
-            return self.on_Assign(stmt)
+            new_stmt = self.on_Assign(stmt)
         elif type(stmt) is Assert:
-            return self.on_Assert(stmt)
+            new_stmt = self.on_Assert(stmt)
         elif type(stmt) is Assume:
-            return self.on_Assume(stmt)
+            new_stmt = self.on_Assume(stmt)
         elif isinstance(stmt, Switch):
             # Uses `isinstance()` and not `type() is` because nmigen.compat requires it.
-            return self.on_Switch(stmt)
+            new_stmt = self.on_Switch(stmt)
         elif isinstance(stmt, Iterable):
-            return self.on_statements(stmt)
+            new_stmt = self.on_statements(stmt)
         else:
-            return self.on_unknown_statement(stmt)
+            new_stmt = self.on_unknown_statement(stmt)
+        if hasattr(stmt, "src_loc") and hasattr(new_stmt, "src_loc"):
+            new_stmt.src_loc = stmt.src_loc
+        return new_stmt
 
     def __call__(self, value):
         return self.on_statement(value)
@@ -237,6 +268,7 @@ class FragmentTransformer:
             self.map_named_ports(fragment, new_fragment)
         else:
             new_fragment = Fragment()
+            new_fragment.flatten = fragment.flatten
         self.map_ports(fragment, new_fragment)
         self.map_subfragments(fragment, new_fragment)
         self.map_domains(fragment, new_fragment)
@@ -293,6 +325,10 @@ class DomainLowerer(FragmentTransformer, ValueTransformer, StatementTransformer)
                               .format(context, domain))
         return self.domains[domain]
 
+    def map_drivers(self, fragment, new_fragment):
+        for domain, signal in fragment.iter_drivers():
+            new_fragment.add_driver(self.on_value(signal), domain)
+
     def on_ClockSignal(self, value):
         cd = self._resolve(value.domain, value)
         return cd.clk
@@ -306,6 +342,66 @@ class DomainLowerer(FragmentTransformer, ValueTransformer, StatementTransformer)
                 raise DomainError("Signal {!r} refers to reset of reset-less domain '{}'"
                                   .format(value, value.domain))
         return cd.rst
+
+
+class SampleDomainInjector(ValueTransformer, StatementTransformer):
+    def __init__(self, domain):
+        self.domain = domain
+
+    def on_Sample(self, value):
+        if value.domain is not None:
+            return value
+        return Sample(value.value, value.clocks, self.domain)
+
+    def __call__(self, stmts):
+        return self.on_statement(stmts)
+
+
+class SampleLowerer(FragmentTransformer, ValueTransformer, StatementTransformer):
+    def __init__(self):
+        self.sample_cache = ValueDict()
+        self.sample_stmts = OrderedDict()
+
+    def _name_reset(self, value):
+        if isinstance(value, Const):
+            return "c${}".format(value.value), value.value
+        elif isinstance(value, Signal):
+            return "s${}".format(value.name), value.reset
+        elif isinstance(value, ClockSignal):
+            return "clk", 0
+        elif isinstance(value, ResetSignal):
+            return "rst", 1
+        else:
+            raise NotImplementedError # :nocov:
+
+    def on_Sample(self, value):
+        if value in self.sample_cache:
+            return self.sample_cache[value]
+
+        if value.clocks == 0:
+            sample = value.value
+        else:
+            assert value.domain is not None
+            sampled_name, sampled_reset = self._name_reset(value.value)
+            name = "$sample${}${}${}".format(sampled_name, value.domain, value.clocks)
+            sample = Signal.like(value.value, name=name, reset_less=True, reset=sampled_reset)
+            sample.attrs["nmigen.sample_reg"] = True
+
+            prev_sample = self.on_Sample(Sample(value.value, value.clocks - 1, value.domain))
+            if value.domain not in self.sample_stmts:
+                self.sample_stmts[value.domain] = []
+            self.sample_stmts[value.domain].append(sample.eq(prev_sample))
+
+        self.sample_cache[value] = sample
+        return sample
+
+    def on_fragment(self, fragment):
+        new_fragment = super().on_fragment(fragment)
+        for domain, stmts in self.sample_stmts.items():
+            new_fragment.add_statements(stmts)
+            for stmt in stmts:
+                new_fragment.add_driver(stmt.lhs, domain)
+        return new_fragment
 
 
 class SwitchCleaner(StatementVisitor):

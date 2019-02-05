@@ -8,20 +8,18 @@ class Counter:
         self.o = Signal()
         self.ce = Signal()
 
-    def get_fragment(self, platform):
+    def elaborate(self, platform):
         m = Module()
         m.d.sync += self.v.eq(self.v + 1)
         m.d.comb += self.o.eq(self.v[-1])
         return CEInserter(self.ce)(m.lower(platform))
 
 
-ctr  = Counter(width=16)
-frag = ctr.get_fragment(platform=None)
+ctr = Counter(width=16)
 
-# print(rtlil.convert(frag, ports=[ctr.o, ctr.ce]))
-print(verilog.convert(frag, ports=[ctr.o, ctr.ce]))
+print(verilog.convert(ctr, ports=[ctr.o, ctr.ce]))
 
-with pysim.Simulator(frag,
+with pysim.Simulator(ctr,
         vcd_file=open("ctrl.vcd", "w"),
         gtkw_file=open("ctrl.gtkw", "w"),
         traces=[ctr.ce, ctr.v, ctr.o]) as sim:

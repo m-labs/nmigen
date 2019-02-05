@@ -1,5 +1,6 @@
 import argparse
 
+from .hdl.ir import Fragment
 from .back import rtlil, verilog, pysim
 
 
@@ -16,6 +17,7 @@ def main_parser(parser=None):
         help="generate RTLIL or Verilog from the design")
     p_generate.add_argument("-t", "--type", dest="generate_type",
         metavar="LANGUAGE", choices=["il", "v"],
+        default="v",
         help="generate LANGUAGE (il for RTLIL, v for Verilog; default: %(default)s)")
     p_generate.add_argument("generate_file",
         metavar="FILE", type=argparse.FileType("w"), nargs="?",
@@ -41,7 +43,7 @@ def main_parser(parser=None):
 
 def main_runner(parser, args, design, platform=None, name="top", ports=()):
     if args.action == "generate":
-        fragment = design.get_fragment(platform=platform)
+        fragment = Fragment.get(design, platform)
         generate_type = args.generate_type
         if generate_type is None and args.generate_file:
             if args.generate_file.name.endswith(".v"):
@@ -60,7 +62,7 @@ def main_runner(parser, args, design, platform=None, name="top", ports=()):
             print(output)
 
     if args.action == "simulate":
-        fragment = design.get_fragment(platform=platform)
+        fragment = Fragment.get(design, platform)
         with pysim.Simulator(fragment,
                 vcd_file=args.vcd_file,
                 gtkw_file=args.gtkw_file,

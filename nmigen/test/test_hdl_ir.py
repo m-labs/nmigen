@@ -474,8 +474,8 @@ class FragmentHierarchyConflictTestCase(FHDLTestCase):
 
     def setUp_memory(self):
         self.m = Memory(width=8, depth=4)
-        self.fr = self.m.read_port().get_fragment(platform=None)
-        self.fw = self.m.write_port().get_fragment(platform=None)
+        self.fr = self.m.read_port().elaborate(platform=None)
+        self.fw = self.m.write_port().elaborate(platform=None)
         self.f1 = Fragment()
         self.f2 = Fragment()
         self.f2.add_subfragment(self.fr)
@@ -508,6 +508,15 @@ class FragmentHierarchyConflictTestCase(FHDLTestCase):
                 msg="Memory 'm' is accessed from multiple fragments: top.<unnamed #0>, "
                     "top.<unnamed #1>; hierarchy will be flattened"):
             self.f1._resolve_hierarchy_conflicts(mode="warn")
+
+    def test_explicit_flatten(self):
+        self.f1 = Fragment()
+        self.f2 = Fragment()
+        self.f2.flatten = True
+        self.f1.add_subfragment(self.f2)
+
+        self.f1._resolve_hierarchy_conflicts(mode="silent")
+        self.assertEqual(self.f1.subfragments, [])
 
 
 class InstanceTestCase(FHDLTestCase):

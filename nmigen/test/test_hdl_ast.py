@@ -137,7 +137,7 @@ class OperatorTestCase(FHDLTestCase):
         self.assertEqual(repr(v1), "(* (const 4'd0) (const 6'd0))")
         self.assertEqual(v1.shape(), (10, False))
         v2 = Const(0, (4, True)) * Const(0, (6, True))
-        self.assertEqual(v2.shape(), (9, True))
+        self.assertEqual(v2.shape(), (10, True))
         v3 = Const(0, (4, True)) * Const(0, (4, False))
         self.assertEqual(v3.shape(), (8, True))
         v5 = 10 * Const(0, 4)
@@ -458,6 +458,8 @@ class SignalTestCase(FHDLTestCase):
         self.assertEqual(s5.decoder, str)
         s6 = Signal.like(10)
         self.assertEqual(s6.shape(), (4, False))
+        s7 = [Signal.like(Signal(4))][0]
+        self.assertEqual(s7.name, "$like")
 
 
 class ClockSignalTestCase(FHDLTestCase):
@@ -494,3 +496,26 @@ class ResetSignalTestCase(FHDLTestCase):
     def test_repr(self):
         s1 = ResetSignal()
         self.assertEqual(repr(s1), "(rst sync)")
+
+
+class SampleTestCase(FHDLTestCase):
+    def test_const(self):
+        s = Sample(1, 1, "sync")
+        self.assertEqual(s.shape(), (1, False))
+
+    def test_signal(self):
+        s1 = Sample(Signal(2), 1, "sync")
+        self.assertEqual(s1.shape(), (2, False))
+        s2 = Sample(ClockSignal(), 1, "sync")
+        s3 = Sample(ResetSignal(), 1, "sync")
+
+    def test_wrong_value_operator(self):
+        with self.assertRaises(TypeError,
+                "Sampled value may only be a signal or a constant, not "
+                "(+ (sig $signal) (const 1'd1))"):
+            Sample(Signal() + 1, 1, "sync")
+
+    def test_wrong_clocks_neg(self):
+        with self.assertRaises(ValueError,
+                "Cannot sample a value 1 cycles in the future"):
+            Sample(Signal(), -1, "sync")

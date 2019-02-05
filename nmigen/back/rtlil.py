@@ -7,6 +7,9 @@ from ..tools import bits_for
 from ..hdl import ast, ir, mem, xfrm
 
 
+__all__ = ["convert"]
+
+
 class _Namer:
     def __init__(self):
         super().__init__()
@@ -111,9 +114,14 @@ class _ModuleBuilder(_Namer, _Bufferer):
             if isinstance(value, str):
                 self._append("    parameter \\{} \"{}\"\n",
                              param, value.translate(self._escape_map))
-            else:
+            elif isinstance(value, int):
                 self._append("    parameter \\{} {:d}\n",
                              param, value)
+            elif isinstance(value, ast.Const):
+                self._append("    parameter \\{} {}'{:b}\n",
+                             param, len(value), value.value)
+            else:
+                assert False
         for port, wire in ports.items():
             self._append("    connect {} {}\n", port, wire)
         self._append("  end\n")
@@ -224,6 +232,7 @@ class _ValueCompilerState:
         self.wires  = ast.SignalDict()
         self.driven = ast.SignalDict()
         self.ports  = ast.SignalDict()
+        self.anys   = ast.ValueDict()
 
         self.expansions = ast.ValueDict()
 
@@ -259,7 +268,7 @@ class _ValueCompilerState:
                                     port_id=port_id, port_kind=port_kind,
                                     src=src(signal.src_loc))
         if signal in self.driven:
-            wire_next = self.rtlil.wire(width=signal.nbits, name=wire_curr + "$next",
+            wire_next = self.rtlil.wire(width=signal.nbits, name="$next" + wire_curr,
                                         src=src(signal.src_loc))
         else:
             wire_next = None
@@ -303,6 +312,9 @@ class _ValueCompiler(xfrm.ValueVisitor):
         raise NotImplementedError # :nocov:
 
     def on_ResetSignal(self, value):
+        raise NotImplementedError # :nocov:
+
+    def on_Sample(self, value):
         raise NotImplementedError # :nocov:
 
     def on_Record(self, value):
@@ -369,6 +381,34 @@ class _RHSValueCompiler(_ValueCompiler):
         else:
             value_twos_compl = value.value & ((1 << value.nbits) - 1)
             return "{}'{:0{}b}".format(value.nbits, value_twos_compl, value.nbits)
+
+    def on_AnyConst(self, value):
+        if value in self.s.anys:
+            return self.s.anys[value]
+
+        res_bits, res_sign = value.shape()
+        res = self.s.rtlil.wire(width=res_bits)
+        self.s.rtlil.cell("$anyconst", ports={
+            "\\Y": res,
+        }, params={
+            "WIDTH": res_bits,
+        }, src=src(value.src_loc))
+        self.s.anys[value] = res
+        return res
+
+    def on_AnySeq(self, value):
+        if value in self.s.anys:
+            return self.s.anys[value]
+
+        res_bits, res_sign = value.shape()
+        res = self.s.rtlil.wire(width=res_bits)
+        self.s.rtlil.cell("$anyseq", ports={
+            "\\Y": res,
+        }, params={
+            "WIDTH": res_bits,
+        }, src=src(value.src_loc))
+        self.s.anys[value] = res
+        return res
 
     def on_Signal(self, value):
         wire_curr, wire_next = self.s.resolve(value)
@@ -503,6 +543,12 @@ class _LHSValueCompiler(_ValueCompiler):
     def on_Const(self, value):
         raise TypeError # :nocov:
 
+    def on_AnyConst(self, value):
+        raise TypeError # :nocov:
+
+    def on_AnySeq(self, value):
+        raise TypeError # :nocov:
+
     def on_Operator(self, value):
         raise TypeError # :nocov:
 
@@ -576,7 +622,7 @@ class _StatementCompiler(xfrm.StatementVisitor):
         self.state.rtlil.cell("$assert", ports={
             "\\A": check_wire,
             "\\EN": en_wire,
-        }, src=src(stmt.test.src_loc))
+        }, src=src(stmt.src_loc))
 
     def on_Assume(self, stmt):
         self(stmt._check.eq(stmt.test))
@@ -587,7 +633,7 @@ class _StatementCompiler(xfrm.StatementVisitor):
         self.state.rtlil.cell("$assume", ports={
             "\\A": check_wire,
             "\\EN": en_wire,
-        }, src=src(stmt.test.src_loc))
+        }, src=src(stmt.src_loc))
 
     def on_Switch(self, stmt):
         self._check_rhs(stmt.test)
@@ -641,7 +687,7 @@ def convert_fragment(builder, fragment, name, top):
         verilog_trigger_sync_emitted = False
 
         # Register all signals driven in the current fragment. This must be done first, as it
-        # affects further codegen; e.g. whether sig$next signals will be generated and used.
+        # affects further codegen; e.g. whether $next\sig signals will be generated and used.
         for domain, signal in fragment.iter_drivers():
             compiler_state.add_driven(signal, sync=domain is not None)
 
@@ -725,8 +771,8 @@ def convert_fragment(builder, fragment, name, top):
 
             with module.process(name="$group_{}".format(group)) as process:
                 with process.case() as case:
-                    # For every signal in comb domain, assign \sig$next to the reset value.
-                    # For every signal in sync domains, assign \sig$next to the current
+                    # For every signal in comb domain, assign $next\sig to the reset value.
+                    # For every signal in sync domains, assign $next\sig to the current
                     # value (\sig).
                     for domain, signal in fragment.iter_drivers():
                         if signal not in group_signals:
@@ -768,7 +814,7 @@ def convert_fragment(builder, fragment, name, top):
                         sync.update(verilog_trigger, "1'0")
                         verilog_trigger_sync_emitted = True
 
-                # For every signal in every domain, assign \sig to \sig$next. The sensitivity list,
+                # For every signal in every domain, assign \sig to $next\sig. The sensitivity list,
                 # however, differs between domains: for comb domains, it is `always`, for sync
                 # domains with sync reset, it is `posedge clk`, for sync domains with async reset
                 # it is `posedge clk or posedge rst`.
@@ -803,7 +849,7 @@ def convert_fragment(builder, fragment, name, top):
 
 
 def convert(fragment, name="top", **kwargs):
-    fragment = fragment.prepare(**kwargs)
+    fragment = ir.Fragment.get(fragment, platform=None).prepare(**kwargs)
     builder = _Builder()
     convert_fragment(builder, fragment, name=name, top=True)
     return str(builder)

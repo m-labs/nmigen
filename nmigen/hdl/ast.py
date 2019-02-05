@@ -9,8 +9,9 @@ from ..tools import *
 
 
 __all__ = [
-    "Value", "Const", "C", "Operator", "Mux", "Part", "Slice", "Cat", "Repl",
+    "Value", "Const", "C", "AnyConst", "AnySeq", "Operator", "Mux", "Part", "Slice", "Cat", "Repl",
     "Array", "ArrayProxy",
+    "Sample", "Past", "Stable", "Rose", "Fell",
     "Signal", "ClockSignal", "ResetSignal",
     "Statement", "Assign", "Assert", "Assume", "Switch", "Delay", "Tick",
     "Passive", "ValueKey", "ValueDict", "ValueSet", "SignalKey", "SignalDict",
@@ -133,6 +134,16 @@ class Value(metaclass=ABCMeta):
         """
         return Operator("b", [self])
 
+    def implies(premise, conclusion):
+        """Implication.
+
+        Returns
+        -------
+        Value, out
+            ``0`` if ``premise`` is true and ``conclusion`` is not, ``1`` otherwise.
+        """
+        return ~premise | conclusion
+
     def part(self, offset, width):
         """Indexed part-select.
 
@@ -254,6 +265,32 @@ class Const(Value):
 C = Const  # shorthand
 
 
+class AnyValue(Value, DUID):
+    def __init__(self, shape):
+        super().__init__(src_loc_at=0)
+        if isinstance(shape, int):
+            shape = shape, False
+        self.nbits, self.signed = shape
+        if not isinstance(self.nbits, int) or self.nbits < 0:
+            raise TypeError("Width must be a non-negative integer, not '{!r}'", self.nbits)
+
+    def shape(self):
+        return self.nbits, self.signed
+
+    def _rhs_signals(self):
+        return ValueSet()
+
+
+class AnyConst(AnyValue):
+    def __repr__(self):
+        return "(anyconst {}'{})".format(self.nbits, "s" if self.signed else "")
+
+
+class AnySeq(AnyValue):
+    def __repr__(self):
+        return "(anyseq {}'{})".format(self.nbits, "s" if self.signed else "")
+
+
 class Operator(Value):
     def __init__(self, op, operands, src_loc_at=0):
         super().__init__(src_loc_at=1 + src_loc_at)
@@ -296,14 +333,9 @@ class Operator(Value):
                 bits, sign = self._bitwise_binary_shape(*op_shapes)
                 return bits + 1, sign
             if self.op == "*":
-                if not a_sign and not b_sign:
-                    # both operands unsigned
-                    return a_bits + b_bits, False
-                if a_sign and b_sign:
-                    # both operands signed
-                    return a_bits + b_bits - 1, True
-                # one operand signed, the other unsigned (add sign bit)
-                return a_bits + b_bits + 1 - 1, True
+                return a_bits + b_bits, a_sign or b_sign
+            if self.op == "%":
+                return a_bits, a_sign
             if self.op in ("<", "<=", "==", "!=", ">", ">=", "b"):
                 return 1, False
             if self.op in ("&", "^", "|"):
@@ -445,10 +477,10 @@ class Cat(Value):
         return sum(len(part) for part in self.parts), False
 
     def _lhs_signals(self):
-        return union(part._lhs_signals() for part in self.parts)
+        return union((part._lhs_signals() for part in self.parts), start=ValueSet())
 
     def _rhs_signals(self):
-        return union(part._rhs_signals() for part in self.parts)
+        return union((part._rhs_signals() for part in self.parts), start=ValueSet())
 
     def _as_const(self):
         value = 0
@@ -585,7 +617,7 @@ class Signal(Value, DUID):
         self.decoder = decoder
 
     @classmethod
-    def like(cls, other, src_loc_at=0, **kwargs):
+    def like(cls, other, name=None, src_loc_at=0, **kwargs):
         """Create Signal based on another.
 
         Parameters
@@ -593,8 +625,12 @@ class Signal(Value, DUID):
         other : Value
             Object to base this Signal on.
         """
-        kw = dict(shape=cls.wrap(other).shape(),
-                  name=tracer.get_var_name(depth=2 + src_loc_at))
+        if name is None:
+            try:
+                name = tracer.get_var_name(depth=2 + src_loc_at)
+            except tracer.NameNotFound:
+                name = "$like"
+        kw = dict(shape=cls.wrap(other).shape(), name=name)
         if isinstance(other, cls):
             kw.update(reset=other.reset, reset_less=other.reset_less,
                       attrs=other.attrs, decoder=other.decoder)
@@ -635,6 +671,9 @@ class ClockSignal(Value):
     def shape(self):
         return 1, False
 
+    def _lhs_signals(self):
+        return ValueSet((self,))
+
     def _rhs_signals(self):
         raise NotImplementedError("ClockSignal must be lowered to a concrete signal") # :nocov:
 
@@ -665,6 +704,9 @@ class ResetSignal(Value):
 
     def shape(self):
         return 1, False
+
+    def _lhs_signals(self):
+        return ValueSet((self,))
 
     def _rhs_signals(self):
         raise NotImplementedError("ResetSignal must be lowered to a concrete signal") # :nocov:
@@ -795,6 +837,52 @@ class ArrayProxy(Value):
         return "(proxy (array [{}]) {!r})".format(", ".join(map(repr, self.elems)), self.index)
 
 
+class Sample(Value):
+    """Value from the past.
+
+    A ``Sample`` of an expression is equal to the value of the expression ``clocks`` clock edges
+    of the ``domain`` clock back. If that moment is before the beginning of time, it is equal
+    to the value of the expression calculated as if each signal had its reset value.
+    """
+    def __init__(self, expr, clocks, domain):
+        super().__init__(src_loc_at=1)
+        self.value  = Value.wrap(expr)
+        self.clocks = int(clocks)
+        self.domain = domain
+        if not isinstance(self.value, (Const, Signal, ClockSignal, ResetSignal)):
+            raise TypeError("Sampled value may only be a signal or a constant, not {!r}"
+                            .format(self.value))
+        if self.clocks < 0:
+            raise ValueError("Cannot sample a value {} cycles in the future"
+                             .format(-self.clocks))
+
+    def shape(self):
+        return self.value.shape()
+
+    def _rhs_signals(self):
+        return ValueSet((self,))
+
+    def __repr__(self):
+        return "(sample {!r} @ {}[{}])".format(
+            self.value, "<default>" if self.domain is None else self.domain, self.clocks)
+
+
+def Past(expr, clocks=1, domain=None):
+    return Sample(expr, clocks, domain)
+
+
+def Stable(expr, clocks=0, domain=None):
+    return Sample(expr, clocks + 1, domain) == Sample(expr, clocks, domain)
+
+
+def Rose(expr, clocks=0, domain=None):
+    return ~Sample(expr, clocks + 1, domain) & Sample(expr, clocks, domain)
+
+
+def Fell(expr, clocks=0, domain=None):
+    return Sample(expr, clocks + 1, domain) & ~Sample(expr, clocks, domain)
+
+
 class _StatementList(list):
     def __repr__(self):
         return "({})".format(" ".join(map(repr, self)))
@@ -827,19 +915,21 @@ class Assign(Statement):
         return "(eq {!r} {!r})".format(self.lhs, self.rhs)
 
 
-class Assert(Statement):
+class Property(Statement):
     def __init__(self, test, _check=None, _en=None):
+        self.src_loc = tracer.get_src_loc()
+
         self.test = Value.wrap(test)
 
         self._check = _check
         if self._check is None:
-            self._check = Signal(reset_less=True, name="$assert$check")
-            self._check.src_loc = self.test.src_loc
+            self._check = Signal(reset_less=True, name="${}$check".format(self._kind))
+            self._check.src_loc = self.src_loc
 
         self._en = _en
         if _en is None:
-            self._en = Signal(reset_less=True, name="$assert$en")
-            self._en.src_loc = self.test.src_loc
+            self._en = Signal(reset_less=True, name="${}$en".format(self._kind))
+            self._en.src_loc = self.src_loc
 
     def _lhs_signals(self):
         return ValueSet((self._en, self._check))
@@ -848,31 +938,15 @@ class Assert(Statement):
         return self.test._rhs_signals()
 
     def __repr__(self):
-        return "(assert {!r})".format(self.test)
+        return "({} {!r})".format(self._kind, self.test)
 
 
-class Assume(Statement):
-    def __init__(self, test, _check=None, _en=None):
-        self.test = Value.wrap(test)
+class Assert(Property):
+    _kind = "assert"
 
-        self._check = _check
-        if self._check is None:
-            self._check = Signal(reset_less=True, name="$assume$check")
-            self._check.src_loc = self.test.src_loc
 
-        self._en = _en
-        if self._en is None:
-            self._en = Signal(reset_less=True, name="$assume$en")
-            self._en.src_loc = self.test.src_loc
-
-    def _lhs_signals(self):
-        return ValueSet((self._en, self._check))
-
-    def _rhs_signals(self):
-        return self.test._rhs_signals()
-
-    def __repr__(self):
-        return "(assume {!r})".format(self.test)
+class Assume(Property):
+    _kind = "assume"
 
 
 class Switch(Statement):
@@ -882,6 +956,7 @@ class Switch(Statement):
         for key, stmts in cases.items():
             if isinstance(key, (bool, int)):
                 key = "{:0{}b}".format(key, len(self.test))
+                assert len(key) <= len(self.test)
             elif isinstance(key, str):
                 assert len(key) == len(self.test)
             else:
@@ -1035,8 +1110,10 @@ class ValueKey:
     def __hash__(self):
         if isinstance(self.value, Const):
             return hash(self.value.value)
-        elif isinstance(self.value, Signal):
+        elif isinstance(self.value, (Signal, AnyValue)):
             return hash(self.value.duid)
+        elif isinstance(self.value, (ClockSignal, ResetSignal)):
+            return hash(self.value.domain)
         elif isinstance(self.value, Operator):
             return hash((self.value.op, tuple(ValueKey(o) for o in self.value.operands)))
         elif isinstance(self.value, Slice):
@@ -1045,10 +1122,12 @@ class ValueKey:
             return hash((ValueKey(self.value.value), ValueKey(self.value.offset),
                          self.value.width))
         elif isinstance(self.value, Cat):
-            return hash(tuple(ValueKey(o) for o in self.value.operands))
+            return hash(tuple(ValueKey(o) for o in self.value.parts))
         elif isinstance(self.value, ArrayProxy):
             return hash((ValueKey(self.value.index),
                          tuple(ValueKey(e) for e in self.value._iter_as_values())))
+        elif isinstance(self.value, Sample):
+            return hash((ValueKey(self.value.value), self.value.clocks, self.value.domain))
         else: # :nocov:
             raise TypeError("Object '{!r}' cannot be used as a key in value collections"
                             .format(self.value))
@@ -1061,8 +1140,10 @@ class ValueKey:
 
         if isinstance(self.value, Const):
             return self.value.value == other.value.value
-        elif isinstance(self.value, Signal):
+        elif isinstance(self.value, (Signal, AnyValue)):
             return self.value is other.value
+        elif isinstance(self.value, (ClockSignal, ResetSignal)):
+            return self.value.domain == other.value.domain
         elif isinstance(self.value, Operator):
             return (self.value.op == other.value.op and
                     len(self.value.operands) == len(other.value.operands) and
@@ -1078,13 +1159,17 @@ class ValueKey:
                     self.value.width == other.value.width)
         elif isinstance(self.value, Cat):
             return all(ValueKey(a) == ValueKey(b)
-                        for a, b in zip(self.value.operands, other.value.operands))
+                        for a, b in zip(self.value.parts, other.value.parts))
         elif isinstance(self.value, ArrayProxy):
             return (ValueKey(self.value.index) == ValueKey(other.value.index) and
                     len(self.value.elems) == len(other.value.elems) and
                     all(ValueKey(a) == ValueKey(b)
                         for a, b in zip(self.value._iter_as_values(),
                                         other.value._iter_as_values())))
+        elif isinstance(self.value, Sample):
+            return (ValueKey(self.value.value) == ValueKey(other.value.value) and
+                    self.value.clocks == other.value.clocks and
+                    self.value.domain == self.value.domain)
         else: # :nocov:
             raise TypeError("Object '{!r}' cannot be used as a key in value collections"
                             .format(self.value))
@@ -1097,7 +1182,7 @@ class ValueKey:
 
         if isinstance(self.value, Const):
             return self.value < other.value
-        elif isinstance(self.value, Signal):
+        elif isinstance(self.value, (Signal, AnyValue)):
             return self.value.duid < other.value.duid
         elif isinstance(self.value, Slice):
             return (ValueKey(self.value.value) < ValueKey(other.value.value) and
@@ -1122,22 +1207,28 @@ class ValueSet(_MappedKeySet):
 
 class SignalKey:
     def __init__(self, signal):
-        if type(signal) is not Signal:
+        if type(signal) is Signal:
+            self._intern = (0, signal.duid)
+        elif type(signal) is ClockSignal:
+            self._intern = (1, signal.domain)
+        elif type(signal) is ResetSignal:
+            self._intern = (2, signal.domain)
+        else:
             raise TypeError("Object '{!r}' is not an nMigen signal".format(signal))
         self.signal = signal
 
     def __hash__(self):
-        return hash(self.signal.duid)
+        return hash(self._intern)
 
     def __eq__(self, other):
         if type(other) is not SignalKey:
             return False
-        return self.signal is other.signal
+        return self._intern == other._intern
 
     def __lt__(self, other):
         if type(other) is not SignalKey:
             raise TypeError("Object '{!r}' cannot be compared to a SignalKey".format(signal))
-        return self.signal.duid < other.signal.duid
+        return self._intern < other._intern
 
     def __repr__(self):
         return "<{}.SignalKey {!r}>".format(__name__, self.signal)

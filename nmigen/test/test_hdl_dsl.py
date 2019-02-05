@@ -95,6 +95,42 @@ class DSLTestCase(FHDLTestCase):
                 msg="'Module' object has no attribute 'nonexistentattr'"):
             m.nonexistentattr
 
+    def test_clock_signal(self):
+        m = Module()
+        m.d.comb += ClockSignal("pix").eq(ClockSignal())
+        self.assertRepr(m._statements, """
+        (
+            (eq (clk pix) (clk sync))
+        )
+        """)
+
+    def test_reset_signal(self):
+        m = Module()
+        m.d.comb += ResetSignal("pix").eq(1)
+        self.assertRepr(m._statements, """
+        (
+            (eq (rst pix) (const 1'd1))
+        )
+        """)
+
+    def test_sample_domain(self):
+        m = Module()
+        i = Signal()
+        o1 = Signal()
+        o2 = Signal()
+        o3 = Signal()
+        m.d.sync += o1.eq(Past(i))
+        m.d.pix  += o2.eq(Past(i))
+        m.d.pix  += o3.eq(Past(i, domain="sync"))
+        f = m.elaborate(platform=None)
+        self.assertRepr(f.statements, """
+        (
+            (eq (sig o1) (sample (sig i) @ sync[1]))
+            (eq (sig o2) (sample (sig i) @ pix[1]))
+            (eq (sig o3) (sample (sig i) @ sync[1]))
+        )
+        """)
+
     def test_If(self):
         m = Module()
         with m.If(self.s1):
@@ -287,6 +323,16 @@ class DSLTestCase(FHDLTestCase):
                     msg="Case value '--' must have the same width as test (which is 4)"):
                 with m.Case("--"):
                     pass
+            with self.assertWarns(SyntaxWarning,
+                    msg="Case value '10110' is wider than test (which has width 4); comparison "
+                        "will never be true"):
+                with m.Case(0b10110):
+                    pass
+        self.assertRepr(m._statements, """
+        (
+            (switch (sig w1) )
+        )
+        """)
 
     def test_Case_outside_Switch_wrong(self):
         m = Module()
@@ -340,7 +386,7 @@ class DSLTestCase(FHDLTestCase):
             "(sig b)": "sync",
         })
 
-        frag = m.lower(platform=None)
+        frag = m.elaborate(platform=None)
         fsm  = frag.find_generated("fsm")
         self.assertIsInstance(fsm.state, Signal)
         self.assertEqual(fsm.encoding, OrderedDict({
@@ -462,10 +508,10 @@ class DSLTestCase(FHDLTestCase):
     def test_submodule_wrong(self):
         m = Module()
         with self.assertRaises(TypeError,
-                msg="Trying to add '1', which does not implement .get_fragment(), as a submodule"):
+                msg="Trying to add '1', which does not implement .elaborate(), as a submodule"):
             m.submodules.foo = 1
         with self.assertRaises(TypeError,
-                msg="Trying to add '1', which does not implement .get_fragment(), as a submodule"):
+                msg="Trying to add '1', which does not implement .elaborate(), as a submodule"):
             m.submodules += 1
 
     def test_domain_named_implicit(self):
@@ -487,7 +533,7 @@ class DSLTestCase(FHDLTestCase):
         m2.d.sync += self.c3.eq(self.s3)
         m1.submodules.foo = m2
 
-        f1 = m1.lower(platform=None)
+        f1 = m1.elaborate(platform=None)
         self.assertRepr(f1.statements, """
         (
             (eq (sig c1) (sig s1))

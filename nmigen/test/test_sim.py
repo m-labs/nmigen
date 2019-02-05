@@ -238,7 +238,7 @@ class SimulatorUnitTestCase(FHDLTestCase):
 class SimulatorIntegrationTestCase(FHDLTestCase):
     @contextmanager
     def assertSimulation(self, module, deadline=None):
-        with Simulator(module.lower(platform=None)) as sim:
+        with Simulator(module.elaborate(platform=None)) as sim:
             yield sim
             if deadline is None:
                 sim.run()
@@ -280,7 +280,7 @@ class SimulatorIntegrationTestCase(FHDLTestCase):
             sim.add_clock(1e-6, domain="sync")
             def process():
                 self.assertEqual((yield self.count), 4)
-                self.assertEqual((yield self.sync.clk), 0)
+                self.assertEqual((yield self.sync.clk), 1)
                 yield
                 self.assertEqual((yield self.count), 5)
                 self.assertEqual((yield self.sync.clk), 1)
@@ -317,11 +317,14 @@ class SimulatorIntegrationTestCase(FHDLTestCase):
                 yield self.b.eq(1)
                 yield
                 self.assertEqual((yield self.x), 4)
+                yield
                 self.assertEqual((yield self.o), 6)
                 yield self.s.eq(1)
                 yield
+                yield
                 self.assertEqual((yield self.o), 4)
                 yield self.s.eq(2)
+                yield
                 yield
                 self.assertEqual((yield self.o), 0)
             sim.add_sync_process(process)
@@ -487,9 +490,11 @@ class SimulatorIntegrationTestCase(FHDLTestCase):
                 yield self.wrport.en.eq(1)
                 yield self.rdport.en.eq(1)
                 yield
+                self.assertEqual((yield self.rdport.data), 0x00)
+                yield
                 self.assertEqual((yield self.rdport.data), 0xaa)
                 yield Delay(1e-6) # let comb propagate
-                self.assertEqual((yield self.rdport.data), 0xaa)
+                self.assertEqual((yield self.rdport.data), 0x33)
             sim.add_clock(1e-6)
             sim.add_sync_process(process)
 
@@ -530,6 +535,66 @@ class SimulatorIntegrationTestCase(FHDLTestCase):
                 self.assertEqual((yield self.rdport.data), 0x33)
             sim.add_clock(1e-6)
             sim.add_process(process)
+
+    def test_memory_read_only(self):
+        self.m = Module()
+        self.memory = Memory(width=8, depth=4, init=[0xaa, 0x55])
+        self.m.submodules.rdport = self.rdport = self.memory.read_port()
+        with self.assertSimulation(self.m) as sim:
+            def process():
+                self.assertEqual((yield self.rdport.data), 0xaa)
+                yield self.rdport.addr.eq(1)
+                yield
+                yield
+                self.assertEqual((yield self.rdport.data), 0x55)
+            sim.add_clock(1e-6)
+            sim.add_sync_process(process)
+
+    def test_sample_helpers(self):
+        m = Module()
+        s = Signal(2)
+        def mk(x):
+            y = Signal.like(x)
+            m.d.comb += y.eq(x)
+            return y
+        p0, r0, f0, s0 = mk(Past(s, 0)), mk(Rose(s)),    mk(Fell(s)),    mk(Stable(s))
+        p1, r1, f1, s1 = mk(Past(s)),    mk(Rose(s, 1)), mk(Fell(s, 1)), mk(Stable(s, 1))
+        p2, r2, f2, s2 = mk(Past(s, 2)), mk(Rose(s, 2)), mk(Fell(s, 2)), mk(Stable(s, 2))
+        p3, r3, f3, s3 = mk(Past(s, 3)), mk(Rose(s, 3)), mk(Fell(s, 3)), mk(Stable(s, 3))
+        with self.assertSimulation(m) as sim:
+            def process_gen():
+                yield s.eq(0b10)
+                yield
+                yield
+                yield s.eq(0b01)
+                yield
+            def process_check():
+                yield
+                yield
+                yield
+
+                self.assertEqual((yield p0), 0b01)
+                self.assertEqual((yield p1), 0b10)
+                self.assertEqual((yield p2), 0b10)
+                self.assertEqual((yield p3), 0b00)
+
+                self.assertEqual((yield s0), 0b0)
+                self.assertEqual((yield s1), 0b1)
+                self.assertEqual((yield s2), 0b0)
+                self.assertEqual((yield s3), 0b1)
+
+                self.assertEqual((yield r0), 0b01)
+                self.assertEqual((yield r1), 0b00)
+                self.assertEqual((yield r2), 0b10)
+                self.assertEqual((yield r3), 0b00)
+
+                self.assertEqual((yield f0), 0b10)
+                self.assertEqual((yield f1), 0b00)
+                self.assertEqual((yield f2), 0b00)
+                self.assertEqual((yield f3), 0b00)
+            sim.add_clock(1e-6)
+            sim.add_sync_process(process_gen)
+            sim.add_sync_process(process_check)
 
     def test_wrong_not_run(self):
         with self.assertWarns(UserWarning,

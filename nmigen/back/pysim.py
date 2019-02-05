@@ -74,6 +74,15 @@ normalize = Const.normalize
 
 
 class _ValueCompiler(ValueVisitor):
+    def on_AnyConst(self, value):
+        raise NotImplementedError # :nocov:
+
+    def on_AnySeq(self, value):
+        raise NotImplementedError # :nocov:
+
+    def on_Sample(self, value):
+        raise NotImplementedError # :nocov:
+
     def on_Record(self, value):
         return self(Cat(value.fields.values()))
 
@@ -90,6 +99,9 @@ class _RHSValueCompiler(_ValueCompiler):
     def on_Signal(self, value):
         if self.sensitivity is not None:
             self.sensitivity.add(value)
+        if value not in self.signal_slots:
+            # A signal that is neither driven nor a port always remains at its reset state.
+            return lambda state: value.reset
         value_slot = self.signal_slots[value]
         if self.signal_mode == "rhs":
             return lambda state: state.curr[value_slot]
@@ -335,7 +347,7 @@ class _StatementCompiler(StatementVisitor):
 
 class Simulator:
     def __init__(self, fragment, vcd_file=None, gtkw_file=None, traces=()):
-        self._fragment        = fragment
+        self._fragment        = Fragment.get(fragment, platform=None)
 
         self._signal_slots    = SignalDict()  # Signal -> int/slot
         self._slot_signals    = list()        # int/slot -> Signal
@@ -374,9 +386,6 @@ class Simulator:
 
         self._run_called      = False
 
-        while not isinstance(self._fragment, Fragment):
-            self._fragment = self._fragment.get_fragment(platform=None)
-
     @staticmethod
     def _check_process(process):
         if inspect.isgeneratorfunction(process):
@@ -402,13 +411,13 @@ class Simulator:
         process = self._check_process(process)
         def sync_process():
             try:
-                result = None
+                cmd = None
                 while True:
-                    self._process_loc[sync_process] = self._name_process(process)
-                    cmd = process.send(result)
                     if cmd is None:
                         cmd = Tick(domain)
                     result = yield cmd
+                    self._process_loc[sync_process] = self._name_process(process)
+                    cmd = process.send(result)
             except StopIteration:
                 pass
         sync_process = sync_process()
@@ -445,7 +454,7 @@ class Simulator:
             hierarchy[fragment] = scope
             for index, (subfragment, name) in enumerate(fragment.subfragments):
                 if name is None:
-                    add_fragment(subfragment, (*scope, "#{}".format(index)))
+                    add_fragment(subfragment, (*scope, "U{}".format(index)))
                 else:
                     add_fragment(subfragment, (*scope, name))
         add_fragment(root_fragment, scope=("top",))
@@ -495,9 +504,9 @@ class Simulator:
 
                 signal_slot = self._signal_slots[signal]
 
-                for subfragment, name in fragment.subfragments:
+                for i, (subfragment, name) in enumerate(fragment.subfragments):
                     if signal in subfragment.ports:
-                        var_name = "{}_{}".format(name, signal.name)
+                        var_name = "{}_{}".format(name or "U{}".format(i), signal.name)
                         break
                 else:
                     var_name = signal.name
@@ -541,17 +550,29 @@ class Simulator:
                     self._domain_signals[domain] |= signals_bits
 
             statements = []
-            for signal in fragment.iter_comb():
-                statements.append(signal.eq(signal.reset))
-            for domain, signal in fragment.iter_sync():
-                statements.append(signal.eq(signal))
+            for domain, signals in fragment.drivers.items():
+                reset_stmts = []
+                hold_stmts  = []
+                for signal in signals:
+                    reset_stmts.append(signal.eq(signal.reset))
+                    hold_stmts .append(signal.eq(signal))
+
+                if domain is None:
+                    statements += reset_stmts
+                else:
+                    if self._domains[domain].async_reset:
+                        statements.append(Switch(self._domains[domain].rst,
+                            {0: hold_stmts, 1: reset_stmts}))
+                    else:
+                        statements += hold_stmts
             statements += fragment.statements
 
             compiler = _StatementCompiler(self._signal_slots)
             funclet = compiler(statements)
 
             def add_funclet(signal, funclet):
-                self._funclets[self._signal_slots[signal]].add(funclet)
+                if signal in self._signal_slots:
+                    self._funclets[self._signal_slots[signal]].add(funclet)
 
             for signal in compiler.sensitivity:
                 add_funclet(signal, funclet)
@@ -625,13 +646,6 @@ class Simulator:
             while curr_domains:
                 domain = curr_domains.pop()
 
-                # Take the computed value (at the start of this delta cycle) of every sync signal
-                # in this domain and update the value for this delta cycle. This can trigger more
-                # synchronous logic, so record that.
-                for signal_slot in self._state.iter_next_dirty():
-                    if self._domain_signals[domain][signal_slot]:
-                        self._commit_signal(signal_slot, domains)
-
                 # Wake up any simulator processes that wait for a domain tick.
                 for process, wait_domain in list(self._wait_tick.items()):
                     if domain == wait_domain:
@@ -644,6 +658,13 @@ class Simulator:
                         # a value from the previous clock cycle, simulator processes observe signal
                         # values from the previous clock cycle on a tick, too.
                         self._run_process(process)
+
+                # Take the computed value (at the start of this delta cycle) of every sync signal
+                # in this domain and update the value for this delta cycle. This can trigger more
+                # synchronous logic, so record that.
+                for signal_slot in self._state.iter_next_dirty():
+                    if self._domain_signals[domain][signal_slot]:
+                        self._commit_signal(signal_slot, domains)
 
             # Unless handling synchronous logic above has triggered more synchronous logic (which
             # can happen e.g. if a domain is clocked off a clock divisor in fabric), we're done.

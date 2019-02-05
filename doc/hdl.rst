@@ -618,7 +618,7 @@ A memory object has the following parameters:
 * The depth, which represents the number of words in the memory.
 * An optional list of integers used to initialize the memory.
 
-To access the memory in hardware, ports can be obtained by calling the ``read_port`` and ``write_port`` methods. A port always has an address signal ``addr`` and a data read signal ``data``, whose polarity depends on whether it is a read or write port. Other signals may be available depending on the port's configuration.
+To access the memory in hardware, ports can be obtained by calling the ``read_port`` and ``write_port`` methods. A port always has an address signal ``addr`` and a data signal ``data``, whose polarity depends on whether it is a read or write port. Other signals may be available depending on the port's configuration.
 
 Options to ``read_port`` are:
 
@@ -665,22 +665,89 @@ This example illustrates a synchronous register file, 16 deep, 8-bits wide::
             return m.lower(platform)
 
 
-Submodules and specials
-=======================
+Submodules
+==========
 
-Submodules and specials can be added by using the ``submodules`` and ``specials`` attributes respectively. This can be done in two ways:
+Submodules can be added by using the ``submodules`` attribute. This can be done in two ways:
 
-#. anonymously, by using the ``+=`` operator on the special attribute directly, e.g. ``self.submodules += some_other_module``. Like with the ``comb`` and ``sync`` attributes, a single module/special or a tuple or list can be specified.
+#. anonymously, by using the ``+=`` operator on the special attribute directly, e.g. ``self.submodules += some_other_module``. Like with the ``comb`` and ``sync`` attributes, a single module/special or a tuple or list can be specified, allowing any number of submodules to be added in a single operation.  However, the added modules are not conveniently referenced using attributes.
 #. by naming the submodule/special using a subattribute of the ``submodules`` or ``specials`` attribute, e.g. ``self.submodules.foo = module_foo``. The submodule/special is then accessible as an attribute of the object, e.g. ``self.foo`` (and not ``self.submodules.foo``). Only one submodule/special can be added at a time using this form.
 
 Clock domains
 =============
 
-Specifying the implementation of a clock domain is done using the ``ClockDomain`` object. It contains the name of the clock domain, a clock signal that can be driven like any other signal in the design (for example, using a PLL instance), and optionally a reset signal. Clock domains without a reset signal are reset using e.g. ``initial`` statements in Verilog, which in many FPGA families initalize the registers during configuration.
+Specifying the implementation of a clock domain is done using the ``ClockDomain`` object. It contains the name of the clock domain, a clock signal that can be driven like any other signal in the design (for example, using a PLL instance), and optionally a reset signal.
 
-The name can be omitted if it can be extracted from the variable name. When using this automatic naming feature, prefixes ``_``, ``cd_`` and ``_cd_`` are removed.
+.. note:
+   Clock domains without a reset signal are reset using e.g. ``initial`` statements in Verilog, which in many FPGA families initalize the registers during configuration.
 
-Clock domains are then added to a module using the ``clock_domains`` special attribute, which behaves exactly like ``submodules`` and ``specials``.
+The name can be omitted if it can be extracted from the variable name. When using this automatic naming feature, the prefix ``cd_`` is removed.
+
+Clock domains are then added to a module using the ``d.domains`` module attribute, which behaves exactly like ``submodules``.
+
+.. note:
+   The ``sync`` clock domain is created for you if, and only if, you do not have any other clock domains in your module.  The moment you add clock domains, nMigen *will not* automatically create ``sync`` on your behalf.
+
+   By not including ``sync`` by default, you are given the opportunity to provide meaningful names to all the clock domains in your module.  This, in turn, provides more meaningful names to the ``clk`` and ``rst`` ports belonging to your domains.  For example, if you create a clock domain ``video``, any module which makes use of this domain will also have ``video_clk`` and, perhaps, ``video_rst`` ports.
+
+   You may create your own ``sync`` attribute easily (see example below).  Note that this clock domain *will not* have any special qualification attached to the ``clk`` and ``rst`` ports, exactly matching nMigen's default behavior.
+
+Clock Domain Management
+~~~~~~~~~~~~~~~~~~~~~~~
+
+When a module has named submodules that define one or several clock domains with the same name, those clock domain names are prefixed with the name of each submodule plus an underscore.
+
+An example use case of this feature is a system with two independent video outputs. Each video output module is made of a clock generator module that defines a clock domain ``pix`` and drives the clock signal, plus a driver module that has synchronous statements and other elements in clock domain ``pix``. The designer of the video output module can simply use the clock domain name ``pix`` in that module. In the top-level system module, the video output submodules are named ``video0`` and ``video1``. nMigen then automatically renames the ``pix`` clock domain of each module to ``video0_pix`` and ``video1_pix``.
+
+Clock domain name overlap is an error condition when any of the submodules that defines the clock domains is anonymous.
+
+Examples
+~~~~~~~~
+
+Our first example illustrates a simple circuit with two flip-flops, each clocked independently.
+
+::
+
+   .              +--------+          +--------+
+   i_d >----------|D      Q|----------|D      Q|-----> o_q
+   .              |        |          |        |
+   clk >----------|>   r   |     ,----|>   r   |
+   .              +--------+     |    +--------+
+   .                   |         |         |
+   rst >---------------'         |         |
+   .                             |         |
+   test_clk >--------------------'         |
+   .                                       |
+   test_rst >------------------------------'
+
+The module listing follows::
+
+    from nmigen import *
+    from nmigen.cli import main
+
+    class Cdc1:
+        def __init__(self, width=1):
+            self.i_d = Signal()
+            self.o_q = Signal()
+            self.dq = Signal()
+
+        def get_fragment(self, platform):
+            m = Module()
+
+            test = ClockDomain()
+            sync = ClockDomain()
+            m.domains += [test, sync]
+
+            m.d.sync += self.dq.eq(self.i_d)
+            m.d.test += self.o_q.eq(self.dq)
+
+            return m.lower(platform)
+
+    if __name__ == '__main__':
+        m = Cdc1()
+        main(m, ports=[m.i_d, m.o_q])
+
+If you generate the Verilog for this module, observe how the ``test`` domain is properly prefixed, but the ``sync`` domain is not.
 
 Summary of special attributes
 =============================
@@ -690,21 +757,21 @@ Summary of special attributes
    +--------------------------------------------+--------------------------------------------------------------+
    | Syntax                                     | Action                                                       |
    +============================================+==============================================================+
-   | self.comb += stmt                          | Add combinatorial statement to current module.               |
+   | self.d.comb += stmt                        | Add combinatorial statement to current module.               |
    +--------------------------------------------+--------------------------------------------------------------+
-   | self.comb += stmtA, stmtB                  | Add combinatorial statements A and B to current module.      |
+   | self.d.comb += stmtA, stmtB                | Add combinatorial statements A and B to current module.      |
    |                                            |                                                              |
-   | self.comb += [stmtA, stmtB]                |                                                              |
+   | self.d.comb += [stmtA, stmtB]              |                                                              |
    +--------------------------------------------+--------------------------------------------------------------+
-   | self.sync += stmt                          | Add synchronous statement to current module, in default      |
-   |                                            | clock domain sys.                                            |
+   | self.d.sync += stmt                        | Add synchronous statement to current module, in default      |
+   |                                            | clock domain sync.                                           |
    +--------------------------------------------+--------------------------------------------------------------+
-   | self.sync.foo += stmt                      | Add synchronous statement to current module, in clock domain |
+   | self.d.foo += stmt                         | Add synchronous statement to current module, in clock domain |
    |                                            | foo.                                                         |
    +--------------------------------------------+--------------------------------------------------------------+
-   | self.sync.foo += stmtA, stmtB              | Add synchronous statements A and B to current module, in     |
+   | self.d.foo += stmtA, stmtB                 | Add synchronous statements A and B to current module, in     |
    |                                            | clock domain foo.                                            |
-   | self.sync.foo += [stmtA, stmtB]            |                                                              |
+   | self.d.foo += [stmtA, stmtB]               |                                                              |
    +--------------------------------------------+--------------------------------------------------------------+
    | self.submodules += mod                     | Add anonymous submodule to current module.                   |
    +--------------------------------------------+--------------------------------------------------------------+
@@ -715,43 +782,17 @@ Summary of special attributes
    | self.submodules.bar = mod                  | Add submodule named bar to current module. The submodule can |
    |                                            | then be accessed using self.bar.                             |
    +--------------------------------------------+--------------------------------------------------------------+
-   | self.specials += spe                       | Add anonymous special to current module.                     |
+   | self.domains += cd                         | Add clock domain to current module.                          |
    +--------------------------------------------+--------------------------------------------------------------+
-   | self.specials += speA, speB                | Add anonymous specials A and B to current module.            |
+   | self.domains += cdA, cdB                   | Add clock domains A and B to current module.                 |
    |                                            |                                                              |
-   | self.specials += [speA, speB]              |                                                              |
+   | self.domains += [cdA, cdB]                 |                                                              |
    +--------------------------------------------+--------------------------------------------------------------+
-   | self.specials.bar = spe                    | Add special named bar to current module. The special can     |
-   |                                            | then be accessed using self.bar.                             |
-   +--------------------------------------------+--------------------------------------------------------------+
-   | self.clock_domains += cd                   | Add clock domain to current module.                          |
-   +--------------------------------------------+--------------------------------------------------------------+
-   | self.clock_domains += cdA, cdB             | Add clock domains A and B to current module.                 |
-   |                                            |                                                              |
-   | self.clock_domains += [cdA, cdB]           |                                                              |
-   +--------------------------------------------+--------------------------------------------------------------+
-   | self.clock_domains.pix = ClockDomain()     | Create and add clock domain pix to current module. The clock |
-   |                                            | domain name is pix in all cases. It can be accessed using    |
-   | self.clock_domains._pix = ClockDomain()    | self.pix, self._pix, self.cd_pix and self._cd_pix,           |
-   |                                            | respectively.                                                |
-   | self.clock_domains.cd_pix = ClockDomain()  |                                                              |
-   |                                            |                                                              |
-   | self.clock_domains._cd_pix = ClockDomain() |                                                              |
-   +--------------------------------------------+--------------------------------------------------------------+
-
-Clock domain management
-=======================
-
-When a module has named submodules that define one or several clock domains with the same name, those clock domain names are prefixed with the name of each submodule plus an underscore.
-
-An example use case of this feature is a system with two independent video outputs. Each video output module is made of a clock generator module that defines a clock domain ``pix`` and drives the clock signal, plus a driver module that has synchronous statements and other elements in clock domain ``pix``. The designer of the video output module can simply use the clock domain name ``pix`` in that module. In the top-level system module, the video output submodules are named ``video0`` and ``video1``. Migen then automatically renames the ``pix`` clock domain of each module to ``video0_pix`` and ``video1_pix``. Note that happens only because the clock domain is defined (using ClockDomain objects), not simply referenced (using e.g. synchronous statements) in the video output modules.
-
-Clock domain name overlap is an error condition when any of the submodules that defines the clock domains is anonymous.
 
 Finalization mechanism
 ======================
 
-Sometimes, it is desirable that some of a module logic be created only after the user has finished manipulating that module. For example, the FSM module supports that states be defined dynamically, and the width of the state signal can be known only after all states have been added. One solution is to declare the final number of states in the FSM constructor, but this is not user-friendly. A better solution is to automatically create the state signal just before the FSM module is converted to V*HDL. Migen supports this using the so-called finalization mechanism.
+Sometimes, it is desirable that some of a module logic be created only after the user has finished manipulating that module. For example, the FSM module supports that states be defined dynamically, and the width of the state signal can be known only after all states have been added. One solution is to declare the final number of states in the FSM constructor, but this is not user-friendly. A better solution is to automatically create the state signal just before the FSM module is converted to V*HDL. nMigen supports this using the so-called finalization mechanism.
 
 Modules can overload a ``do_finalize`` method that can create logic and is called using the algorithm below:
 
@@ -764,16 +805,3 @@ Modules can overload a ``do_finalize`` method that can create logic and is calle
 Finalization is automatically invoked at V*HDL conversion and at simulation. It can be manually invoked for any module by calling its ``finalize`` method.
 
 The clock domain management mechanism explained above happens during finalization.
-
-Conversion for synthesis
-************************
-
-Any FHDL module can be converted into synthesizable Verilog HDL. This is accomplished by using the ``convert`` function in the ``migen.fhdl.verilog`` module: ::
-
-  # define FHDL module MyDesign here
-
-  if __name__ == "__main__":
-    from migen.fhdl.verilog import convert
-    convert(MyDesign()).write("my_design.v")
-
-The ``migen.build`` component provides scripts to interface third-party FPGA tools (from Xilinx, Altera and Lattice) to Migen, and a database of boards for the easy deployment of designs.

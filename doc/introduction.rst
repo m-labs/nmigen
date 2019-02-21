@@ -93,7 +93,10 @@ Either run the ``setup.py`` installation script or simply set ``PYTHONPATH`` to 
 Explicitly in a ``requirements.txt`` file
 =========================================
 
-nMigen can be referenced in a ``requirements.txt`` file (used for ``pip install -r requirements.txt``) via ``-e git+http://github.com/m-labs/nmigen.git#egg=nmigen``. See the pip documentation for more information.
+nMigen can be referenced in a ``requirements.txt`` file (used for ``pip3 install -r requirements.txt``) via ``-e git+http://github.com/m-labs/nmigen.git#egg=nmigen``. See the pip3 documentation for more information.
+
+.. note::
+   You **must** use an appropriate version of ``pip`` for your distribution's Python 3 environment.  nMigen **will not** run with Python 2.  Some distributions (e.g., Debian or Debian-derived distributions) use ``pip3`` while others (e.g., Void Linux) support the use of either ``pip`` or ``pip3`` depending on your local configuration.  If possible, use a virtual environment, as shown above, to guarantee a consistent Python user experience without sacrificing convenience.  Otherwise, make sure you always opt to use the Python 3 tools.
 
 Feedback
 ********

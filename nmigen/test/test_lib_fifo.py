@@ -164,14 +164,17 @@ class FIFOContractSpec:
         m = Module()
         m.submodules.dut = fifo = self.fifo
 
+        initstate = Signal()
+        m.submodules += Instance("$initstate", o_Y=initstate)
+
         m.domains += ClockDomain("sync")
-        m.d.comb += ResetSignal().eq(0)
+        m.d.comb += ResetSignal().eq(initstate)
         if self.wdomain != "sync":
             m.domains += ClockDomain(self.wdomain)
-            m.d.comb += ResetSignal(self.wdomain).eq(0)
+            m.d.comb += ResetSignal(self.wdomain).eq(initstate)
         if self.rdomain != "sync":
             m.domains += ClockDomain(self.rdomain)
-            m.d.comb += ResetSignal(self.rdomain).eq(0)
+            m.d.comb += ResetSignal(self.rdomain).eq(initstate)
 
         if hasattr(fifo, "replace"):
             m.d.comb += fifo.replace.eq(0)
@@ -211,9 +214,6 @@ class FIFOContractSpec:
                     ]
                 with m.If((read_1 == entry_1) & (read_2 == entry_2)):
                     m.next = "DONE"
-
-        initstate = Signal()
-        m.submodules += Instance("$initstate", o_Y=initstate)
         with m.If(initstate):
             m.d.comb += Assume(write_fsm.ongoing("WRITE-1"))
             m.d.comb += Assume(read_fsm.ongoing("READ"))

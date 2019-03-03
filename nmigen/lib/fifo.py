@@ -264,6 +264,56 @@ class SyncFIFOBuffered(FIFOInterface):
 
         return m
 
+# A helper module for AsyncFIFO
+class GrayBinCounter:
+    __doc__ = """Synchronous counter with both binary and Gray code output.
+    Both outputs count synchronously while ``incr`` is asserted.
+
+    ``gray`` being registered is necessary for clock domain crossing.
+    Putting a GrayEncoder on the output of a simple binary counter creates
+    static hazards on (almost) all output bits; Gray code's CDC safety
+    is based on a guarantee that only a single bit transitions at once.
+
+    Parameters
+    ----------
+    width : int
+        Bit width of both outputs
+    domain : str
+        Clock domain which count is synchronous to. Defaults to "sync".
+    Attributes
+    ----------
+    incr : Signal(1)
+        The counter increments when ``incr`` is high.
+    bin : Signal(width)
+        Binary count value
+    gray: Signal(width)
+        Gray-coded count value
+    """
+
+    def __init__(self, width, domain="sync"):
+        self.width = width
+        self.domain = domain
+
+        self.incr = Signal()
+        self.bin = Signal(width)
+        self.gray = Signal(width, attrs={"no_retiming": True})
+
+    def elaborate(self, platform):
+        m = Module()
+
+        enc = m.submodules.enc = GrayEncoder(self.width)
+        bin_next = self.bin + self.incr
+        gray_next = Signal(self.width)
+
+        m.d.comb += [
+            enc.i.eq(bin_next),
+            gray_next.eq(enc.o)
+        ]
+        m.d[self.domain] += [
+            self.bin.eq(bin_next),
+            self.gray.eq(gray_next)
+        ]
+        return m
 
 class AsyncFIFO(FIFOInterface):
     __doc__ = FIFOInterface._doc_template.format(
@@ -297,28 +347,33 @@ class AsyncFIFO(FIFOInterface):
 
         m = Module()
 
+        do_write = self.writable & self.we
+        do_read  = self.readable & self.re
+
         produce_w_bin = Signal(self._ctr_bits)
         produce_w_gry = Signal(self._ctr_bits)
         produce_r_gry = Signal(self._ctr_bits)
-        produce_enc = m.submodules.produce_enc = \
-            GrayEncoder(self._ctr_bits)
         produce_cdc = m.submodules.produce_cdc = \
             MultiReg(produce_w_gry, produce_r_gry, odomain="read")
+        produce_ctr = m.submodules.produce_ctr = \
+            GrayBinCounter(self._ctr_bits, domain="write")
         m.d.comb += [
-            produce_enc.i.eq(produce_w_bin),
-            produce_w_gry.eq(produce_enc.o),
+            produce_ctr.incr.eq(do_write),
+            produce_w_bin.eq(produce_ctr.bin),
+            produce_w_gry.eq(produce_ctr.gray)
         ]
 
         consume_r_bin = Signal(self._ctr_bits)
         consume_r_gry = Signal(self._ctr_bits)
         consume_w_gry = Signal(self._ctr_bits)
-        consume_enc = m.submodules.consume_enc = \
-            GrayEncoder(self._ctr_bits)
         consume_cdc = m.submodules.consume_cdc = \
             MultiReg(consume_r_gry, consume_w_gry, odomain="write")
+        consume_ctr = m.submodules.consume_ctr = \
+            GrayBinCounter(self._ctr_bits, domain="read")
         m.d.comb += [
-            consume_enc.i.eq(consume_r_bin),
-            consume_r_gry.eq(consume_enc.o),
+            consume_ctr.incr.eq(do_read),
+            consume_r_bin.eq(consume_ctr.bin),
+            consume_r_gry.eq(consume_ctr.gray),
         ]
 
         m.d.comb += [
@@ -328,11 +383,6 @@ class AsyncFIFO(FIFOInterface):
                 (produce_w_gry[:-2] != consume_w_gry[:-2])),
             self.readable.eq(consume_r_gry != produce_r_gry)
         ]
-
-        do_write = self.writable & self.we
-        do_read  = self.readable & self.re
-        m.d.write += produce_w_bin.eq(produce_w_bin + do_write)
-        m.d.read  += consume_r_bin.eq(consume_r_bin + do_read)
 
         storage = Memory(self.width, self.depth)
         wrport  = m.submodules.wrport = storage.write_port(domain="write")

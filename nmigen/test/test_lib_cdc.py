@@ -101,3 +101,82 @@ class ResetSynchronizerTestCase(FHDLTestCase):
                 yield Tick(); yield Delay(1e-8)
             sim.add_process(process)
             sim.run()
+
+
+# TODO: test with distinct clocks
+class PulseSynchronizerTestCase(FHDLTestCase):
+    def test_paramcheck(self):
+        with self.assertRaises(TypeError):
+            ps = PulseSynchronizer("w", "r", sync_stages=0)
+        with self.assertRaises(TypeError):
+            ps = PulseSynchronizer("w", "r", sync_stages="abc")
+        ps = PulseSynchronizer("w", "r", sync_stages = 1)
+
+    def test_smoke(self):
+        m = Module()
+        m.domains += ClockDomain("sync")
+        ps = m.submodules.dut = PulseSynchronizer("sync", "sync")
+
+        with Simulator(m, vcd_file = open("test.vcd", "w")) as sim:
+            sim.add_clock(1e-6)
+            def process():
+                yield ps.i.eq(0)
+                # TODO: think about reset
+                for n in range(5):
+                    yield Tick()
+                # Make sure no pulses are generated in quiescent state
+                for n in range(3):
+                    yield Tick()
+                    self.assertEqual((yield ps.o), 0)
+                # Check conservation of pulses
+                accum = 0
+                for n in range(10):
+                    yield ps.i.eq(1 if n < 4 else 0)
+                    yield Tick()
+                    accum += yield ps.o
+                self.assertEqual(accum, 4)
+            sim.add_process(process)
+            sim.run()
+
+
+# TODO: test with distinct clocks
+# (since we can currently only test symmetric aspect ratio)
+class GearboxTestCase(FHDLTestCase):
+    def test_paramcheck(self):
+        with self.assertRaises(TypeError):
+            g = Gearbox(0, "i", 1, "o")
+        with self.assertRaises(TypeError):
+            g = Gearbox(1, "i", 0, "o")
+        with self.assertRaises(TypeError):
+            g = Gearbox("x", "i", 1, "o")
+        with self.assertRaises(TypeError):
+            g = Gearbox(1, "i", "x", "o")
+        g = Gearbox(1, "i", 1, "o")
+        g = Gearbox(7, "i", 1, "o")
+        g = Gearbox(7, "i", 3, "o")
+        g = Gearbox(7, "i", 7, "o")
+        g = Gearbox(3, "i", 7, "o")
+
+    def test_smoke_symmetric(self):
+        m = Module()
+        m.domains += ClockDomain("sync")
+        g = m.submodules.dut = Gearbox(8, "sync", 8, "sync")
+
+        with Simulator(m, vcd_file = open("test.vcd", "w")) as sim:
+            sim.add_clock(1e-6)
+            def process():
+                pipeline_filled = False
+                expected_out = 1
+                yield Tick()
+                for i in range(g._ichunks * 4):
+                    yield g.i.eq(i)
+                    if (yield g.o):
+                        pipeline_filled = True
+                    if pipeline_filled:
+                        self.assertEqual((yield g.o), expected_out)
+                        expected_out += 1
+                    yield Tick()
+                self.assertEqual(pipeline_filled, True)
+                self.assertEqual(expected_out > g._ichunks * 2, True)
+            sim.add_process(process)
+            sim.run()

@@ -1,7 +1,15 @@
 from .. import *
+from math import gcd
 
 
-__all__ = ["MultiReg", "ResetSynchronizer"]
+__all__ = ["MultiReg", "ResetSynchronizer", "PulseSynchronizer", "Gearbox"]
+
+
+def _incr(signal, modulo):
+    if modulo == 2 ** len(signal):
+        return signal + 1
+    else:
+        return Mux(signal == modulo - 1, 0, signal + 1)
 
 
 class MultiReg(Elaboratable):
@@ -113,4 +121,129 @@ class ResetSynchronizer(Elaboratable):
             ResetSignal("_reset_sync").eq(self.arst),
             ResetSignal(self.domain).eq(self._regs[-1])
         ]
+        return m
+
+
+class PulseSynchronizer(Elaboratable):
+    """A one-clock pulse on the input produces a one-clock pulse on the output.
+
+    If the output clock is faster than the input clock, then the input may be safely asserted at
+    100% duty cycle. Otherwise, if the clock ratio is n : 1, the input may be asserted at most once
+    in every n input clocks, else pulses may be dropped.
+
+    Other than this there is no constraint on the ratio of input and output clock frequency.
+
+    Parameters
+    ----------
+
+    idomain : str
+        Name of input clock domain.
+    odomain : str
+        Name of output clock domain.
+    sync_stages : int
+        Number of synchronisation flops between the two clock domains. 2 is the default, and
+        minimum safe value. High-frequency designs may choose to increase this.
+    """
+    def __init__(self, idomain, odomain, sync_stages=2):
+        if not isinstance(sync_stages, int) or sync_stages < 1:
+            raise TypeError("sync_stages must be a positive integer, not '{!r}'".format(sync_stages))
+
+        self.i = Signal()
+        self.o = Signal()
+        self.idomain = idomain
+        self.odomain = odomain
+        self.sync_stages = sync_stages
+
+    def elaborate(self, platform):
+        m = Module()
+
+        itoggle = Signal()
+        otoggle = Signal()
+        mreg = m.submodules.mreg = \
+            MultiReg(itoggle, otoggle, odomain=self.odomain, n=self.sync_stages)
+        otoggle_prev = Signal()
+
+        m.d[self.idomain] += itoggle.eq(itoggle ^ self.i)
+        m.d[self.odomain] += otoggle_prev.eq(otoggle)
+        m.d.comb += self.o.eq(otoggle ^ otoggle_prev)
+
+        return m
+
+
+class Gearbox(Elaboratable):
+    """Adapt the width of a continous datastream.
+
+    Input:  m bits wide, clock frequency f MHz.
+    Output: n bits wide, clock frequency m / n * f MHz.
+
+    Used to adjust width of a datastream when interfacing system logic to a SerDes. The input and
+    output clocks must be derived from the same reference clock, to maintain distance between
+    read and write pointers.
+
+    Parameters
+    ----------
+    iwidth : int
+        Bit width of the input
+    idomain : str
+        Name of input clock domain
+    owidth : int
+        Bit width of the output
+    odomain : str
+        Name of output clock domain
+
+    Attributes
+    ----------
+    i : Signal(iwidth), in
+        Input datastream. Sampled on every input clock.
+    o : Signal(owidth), out
+        Output datastream. Transitions on every output clock.
+    """
+    def __init__(self, iwidth, idomain, owidth, odomain):
+        if not isinstance(iwidth, int) or iwidth < 1:
+            raise TypeError("iwidth must be a positive integer, not '{!r}'".format(iwidth))
+        if not isinstance(owidth, int) or owidth < 1:
+            raise TypeError("owidth must be a positive integer, not '{!r}'".format(owidth))
+
+        self.i = Signal(iwidth)
+        self.o = Signal(owidth)
+        self.iwidth = iwidth
+        self.idomain = idomain
+        self.owidth = owidth
+        self.odomain = odomain
+
+        storagesize = iwidth * owidth // gcd(iwidth, owidth)
+        while storagesize // iwidth < 4:
+            storagesize *= 2
+        while storagesize // owidth < 4:
+            storagesize *= 2
+
+        self._storagesize = storagesize
+        self._ichunks = storagesize // self.iwidth
+        self._ochunks = storagesize // self.owidth
+        assert(self._ichunks * self.iwidth == storagesize)
+        assert(self._ochunks * self.owidth == storagesize)
+
+    def elaborate(self, platform):
+        m = Module()
+
+        storage = Signal(self._storagesize, attrs={"no_retiming": True})
+        i_faster = self._ichunks > self._ochunks
+        iptr = Signal(max=self._ichunks - 1, reset=(self._ichunks // 2 if i_faster else 0))
+        optr = Signal(max=self._ochunks - 1, reset=(0 if i_faster else self._ochunks // 2))
+
+        m.d[self.idomain] += iptr.eq(_incr(iptr, self._storagesize))
+        m.d[self.odomain] += optr.eq(_incr(optr, self._storagesize))
+
+        with m.Switch(iptr):
+            for n in range(self._ichunks):
+                s = slice(n * self.iwidth, (n + 1) * self.iwidth)
+                with m.Case(n):
+                    m.d[self.idomain] += storage[s].eq(self.i)
+
+        with m.Switch(optr):
+            for n in range(self._ochunks):
+                s = slice(n * self.owidth, (n + 1) * self.owidth)
+                with m.Case(n):
+                    m.d[self.odomain] += self.o.eq(storage[s])
+
         return m

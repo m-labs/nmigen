@@ -5,6 +5,20 @@ from ..lib.cdc import *
 
 
 class MultiRegTestCase(FHDLTestCase):
+    def test_paramcheck(self):
+        i = Signal()
+        o = Signal()
+        with self.assertRaises(TypeError):
+            m = MultiReg(i, o, n=0)
+        with self.assertRaises(TypeError):
+            m = MultiReg(i, o, n="x")
+        with self.assertRaises(ValueError):
+            m = MultiReg(i, o, n=2, reset="a")
+        with self.assertRaises(TypeError):
+            m = MultiReg(i, o, n=2, reset=i)
+        m = MultiReg(i, o, n=1)
+        m = MultiReg(i, o, reset=-1)
+
     def test_basic(self):
         i = Signal()
         o = Signal()
@@ -43,6 +57,14 @@ class MultiRegTestCase(FHDLTestCase):
 
 
 class ResetSynchronizerTestCase(FHDLTestCase):
+    def test_paramcheck(self):
+        arst = Signal()
+        with self.assertRaises(TypeError):
+            r = ResetSynchronizer(arst, n=0)
+        with self.assertRaises(TypeError):
+            r = ResetSynchronizer(arst, n="a")
+        r = ResetSynchronizer(arst)
+
     def test_basic(self):
         arst = Signal()
         m = Module()

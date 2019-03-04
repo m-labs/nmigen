@@ -50,6 +50,8 @@ class MultiReg(Elaboratable):
     MultiReg is reset by the ``odomain`` reset only.
     """
     def __init__(self, i, o, odomain="sync", n=2, reset=0, reset_less=True):
+        if not isinstance(n, int) or n < 1:
+            raise TypeError("n must be a positive integer, not '{!r}'".format(n))
         self.i = i
         self.o = o
         self.odomain = odomain
@@ -70,7 +72,27 @@ class MultiReg(Elaboratable):
 
 
 class ResetSynchronizer(Elaboratable):
+    """Synchronize the deassertion of a reset to a local clock.
+
+    Output `assertion` is asynchronous, so the local clock need not be free-running.
+
+    Parameters
+    ----------
+    arst : Signal(1), out
+        Asynchronous reset signal, to be synchronized.
+    domain : str
+        Name of domain to synchronize reset to.
+    n : int, >=1
+        Number of clock edges from input deassertion to output deassertion
+
+    Override
+    --------
+    Define the ``get_reset_sync`` platform attribute to override the implementation of
+    ResetSynchronizer, e.g. to instantiate library cells directly.
+    """
     def __init__(self, arst, domain="sync", n=2):
+        if not isinstance(n, int) or n < 1:
+            raise TypeError("n must be a positive integer, not '{!r}'".format(n))
         self.arst = arst
         self.domain = domain
 

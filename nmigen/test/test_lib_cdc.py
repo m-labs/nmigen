@@ -19,6 +19,14 @@ class MultiRegTestCase(FHDLTestCase):
         m = MultiReg(i, o, n=1)
         m = MultiReg(i, o, reset=-1)
 
+    def test_platform(self):
+        platform = lambda: None
+        platform.get_multi_reg = lambda m: "foobar{}".format(len(m._regs))
+        i = Signal()
+        o = Signal()
+        m = MultiReg(i, o, n=5)
+        self.assertEqual(m.elaborate(platform), "foobar5")
+
     def test_basic(self):
         i = Signal()
         o = Signal()
@@ -64,6 +72,13 @@ class ResetSynchronizerTestCase(FHDLTestCase):
         with self.assertRaises(TypeError):
             r = ResetSynchronizer(arst, n="a")
         r = ResetSynchronizer(arst)
+
+    def test_platform(self):
+        platform = lambda: None
+        platform.get_reset_sync = lambda m: "foobar{}".format(len(m._regs))
+        arst = Signal()
+        rs = ResetSynchronizer(arst, n=6)
+        self.assertEqual(rs.elaborate(platform), "foobar6")
 
     def test_basic(self):
         arst = Signal()

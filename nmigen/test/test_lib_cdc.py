@@ -200,6 +200,47 @@ class BusSynchronizerTestCase(FHDLTestCase):
             sim.add_process(process)
             sim.run()
 
+class ElasticBufferTestCase(FHDLTestCase):
+    def test_paramcheck(self):
+        with self.assertRaises(TypeError):
+            e = ElasticBuffer(0, 2, "i", "o")
+        with self.assertRaises(TypeError):
+            e = ElasticBuffer("i", 2, "i", "o")
+        with self.assertRaises(TypeError):
+            e = ElasticBuffer(1, 1, "i", "o")
+        with self.assertRaises(TypeError):
+            e = ElasticBuffer(1, "i", "i", "o")
+        e = ElasticBuffer(1, 2, "i", "o")
+
+    def test_smoke_po2(self):
+        self.check_smoke(8, 8)
+
+    def test_smoke_nonpo2(self):
+        self.check_smoke(8, 7)
+
+    def check_smoke(self, width, depth):
+        m = Module()
+        m.domains += ClockDomain("sync")
+        e = m.submodules.dut = ElasticBuffer(width, depth, "sync", "sync")
+
+        with Simulator(m, vcd_file = open("test.vcd", "w")) as sim:
+            sim.add_clock(1e-6)
+            def process():
+                pipeline_filled = False
+                expected_out = 1
+                yield Tick()
+                for i in range(depth * 4):
+                    yield e.i.eq(i)
+                    if (yield e.o):
+                        pipeline_filled = True
+                    if pipeline_filled:
+                        self.assertEqual((yield e.o), expected_out)
+                        expected_out = (expected_out + 1) % (2 ** width)
+                    yield Tick()
+                self.assertEqual(pipeline_filled, True)
+            sim.add_process(process)
+            sim.run()
+
 # TODO: test with distinct clocks
 # (since we can currently only test symmetric aspect ratio)
 class GearboxTestCase(FHDLTestCase):

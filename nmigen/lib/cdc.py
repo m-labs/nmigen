@@ -7,6 +7,7 @@ __all__ = [
     "ResetSynchronizer",
     "PulseSynchronizer",
     "BusSynchronizer",
+    "ElasticBuffer",
     "Gearbox"
 ]
 
@@ -260,6 +261,66 @@ class BusSynchronizer(Elaboratable):
             m.d[self.odomain] += self.o.eq(buf_o)
 
         return m
+
+class ElasticBuffer(Elaboratable):
+    """Pass data between two clock domains with the same frequency, and bounded phase difference.
+
+    Increasing the storage depth increases tolerance for clock wander and jitter, but still within
+    some bound. For less-well-behaved clocks, consider AsyncFIFO.
+
+    Parameters
+    ----------
+    width : int > 0
+        Width of databus to be resynchronized
+    depth : int > 1
+        Number of storage elements in buffer
+    idomain : str
+        Name of input clock domain
+    odomain : str
+        Name of output clock domain
+
+    Attributes
+    ----------
+    i : Signal(width)
+        Input data bus
+    o : Signal(width)
+        Output data bus
+    """
+    def __init__(self, width, depth, idomain, odomain):
+        if not isinstance(width, int) or width < 1:
+            raise TypeError("width must be a positive integer, not '{!r}'".format(width))
+        if not isinstance(depth, int) or depth <= 1:
+            raise TypeError("depth must be an integer > 1, not '{!r}'".format(depth))
+
+        self.i = Signal(width)
+        self.o = Signal(width)
+        self.width = width
+        self.depth = depth
+        self.idomain = idomain
+        self.odomain = odomain
+
+    def elaborate(self, platform):
+        m = Module()
+
+        wptr = Signal(max=self.depth, reset=self.depth // 2)
+        rptr = Signal(max=self.depth)
+        m.d[self.idomain] += wptr.eq(_incr(wptr, self.depth))
+        m.d[self.odomain] += rptr.eq(_incr(rptr, self.depth))
+
+        storage = Memory(self.width, self.depth)
+        wport = m.submodules.wport = storage.write_port(domain=self.idomain)
+        rport = m.submodules.rport = storage.read_port(domain=self.odomain)
+
+        m.d.comb += [
+            wport.en.eq(1),
+            wport.addr.eq(wptr),
+            wport.data.eq(self.i),
+            rport.addr.eq(rptr),
+            self.o.eq(rport.data)
+        ]
+
+        return m
+
 
 class Gearbox(Elaboratable):
     """Adapt the width of a continous datastream.

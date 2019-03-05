@@ -153,6 +153,52 @@ class PulseSynchronizerTestCase(FHDLTestCase):
             sim.add_process(process)
             sim.run()
 
+class BusSynchronizerTestCase(FHDLTestCase):
+    def test_paramcheck(self):
+        with self.assertRaises(TypeError):
+            bs = BusSynchronizer(0, "i", "o")
+        with self.assertRaises(TypeError):
+            bs = BusSynchronizer("x", "i", "o")
+
+        bs = BusSynchronizer(1, "i", "o")
+
+        with self.assertRaises(TypeError):
+            bs = BusSynchronizer(1, "i", "o", sync_stages = 1)
+        with self.assertRaises(TypeError):
+            bs = BusSynchronizer(1, "i", "o", sync_stages = "a")
+        with self.assertRaises(TypeError):
+            bs = BusSynchronizer(1, "i", "o", timeout=-1)
+        with self.assertRaises(TypeError):
+            bs = BusSynchronizer(1, "i", "o", timeout="a")
+
+        bs = BusSynchronizer(1, "i", "o", timeout=0)
+
+    def test_smoke_w1(self):
+        self.check_smoke(width=1, timeout=127)
+
+    def test_smoke_normalcase(self):
+        self.check_smoke(width=8, timeout=127)
+
+    def test_smoke_notimeout(self):
+        self.check_smoke(width=8, timeout=0)
+
+    def check_smoke(self, width, timeout):
+        m = Module()
+        m.domains += ClockDomain("sync")
+        bs = m.submodules.dut = BusSynchronizer(width, "sync", "sync", timeout=timeout)
+
+        with Simulator(m, vcd_file = open("test.vcd", "w")) as sim:
+            sim.add_clock(1e-6)
+            def process():
+                for i in range(10):
+                    testval = i % (2 ** width)
+                    yield bs.i.eq(testval)
+                    # 6-cycle round trip, and if one in progress, must complete first:
+                    for j in range(11):
+                        yield Tick()
+                    self.assertEqual((yield bs.o), testval)
+            sim.add_process(process)
+            sim.run()
 
 # TODO: test with distinct clocks
 # (since we can currently only test symmetric aspect ratio)

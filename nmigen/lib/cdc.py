@@ -5,13 +5,60 @@ __all__ = ["MultiReg", "ResetSynchronizer"]
 
 
 class MultiReg:
-    def __init__(self, i, o, odomain="sync", n=2, reset=0):
+    """Resynchronise a signal to a different clock domain.
+
+    Consists of a chain of flipflops. Eliminates metastabilities
+    at the output, but provides no other guarantee as to the safe
+    domain-crossing of a signal.
+
+    Parameters
+    ----------
+    i : Signal(), in
+        Signal to be resynchronised
+    o : Signal(), out
+        Signal connected to synchroniser output
+    odomain : str
+        Name of output clock domain
+    n : int
+        Number of flops between input and output.
+    reset : int
+        Reset value of the flipflops. On FPGA, even if `reset_less` is True,
+        the MultiReg is still set to this value during initialisation.
+    reset_less : int
+        If true, this MultiReg is unaffected by odomain reset. (default)
+        See "Note on Reset" below.
+
+    Override
+    --------
+    Define the `get_multi_reg` platform attribute to override
+    the implementation of MultiReg, e.g. to instantiate
+    library cells directly.
+
+    Note on Reset
+    -------------
+    MultiReg is non-resettable by default. Usually this is the safest option;
+    on FPGA the MultiReg will still be initialised to its `reset` value,
+    when the FPGA loads its configuration bitstream.
+
+    However, in designs where the value of the MultiReg must be valid
+    immediately after reset, consider `reset_less`=False if:
+
+     - You are targeting an ASIC, or an FPGA that does not initialise
+       flipflop values
+     - Your design features warm (non-power-on) resets of `odomain`, so
+       the one-time initialisation at power on is insufficient
+     - Your design features a sequenced reset, and the MultiReg must maintain
+       its reset value until `odomain` reset specifically is deasserted.
+
+    MultiRegs are reset by the `odomain` reset only.
+    """
+    def __init__(self, i, o, odomain="sync", n=2, reset=0, reset_less=True):
         self.i = i
         self.o = o
         self.odomain = odomain
 
         self._regs = [Signal(self.i.shape(), name="cdc{}".format(i),
-                             reset=reset, reset_less=True, attrs={"no_retiming": True})
+                             reset=reset, reset_less=reset_less, attrs={"no_retiming": True})
                       for i in range(n)]
 
     def elaborate(self, platform):

@@ -2,7 +2,7 @@ from .. import *
 from ..hdl.rec import *
 
 
-__all__ = ["pin_layout", "Pin"]
+__all__ = ["pin_layout", "Pin", "CRG"]
 
 
 def pin_layout(width, dir, xdr=1):
@@ -92,3 +92,26 @@ class Pin(Record):
         self.xdr   = xdr
 
         super().__init__(pin_layout(self.width, self.dir, self.xdr), name=name)
+
+
+class CRG(Elaboratable):
+    def __init__(self, clk, reset_delay=1):
+        self.clk = clk
+        self.reset_timer = Signal(max=max(2, reset_delay+1), reset=reset_delay)
+
+    def elaborate(self, platform):
+        m = Module()
+
+        cd_por  = m.domains.cd_por  = ClockDomain(reset_less=True)
+        cd_sync = m.domains.cd_sync = ClockDomain()
+
+        m.d.comb += [
+            cd_por.clk.eq(self.clk),
+            cd_sync.clk.eq(self.clk),
+            cd_sync.rst.eq(self.reset_timer != 0)
+        ]
+
+        with m.If(self.reset_timer != 0):
+            m.d.por += self.reset_timer.eq(self.reset_timer - 1)
+
+        return m

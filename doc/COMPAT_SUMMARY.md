@@ -53,7 +53,7 @@ Compatibility summary
     - (⊕) `specials` **obs**
       - (⊙) `Special` **brk**
       - (⊕) `Tristate` → `.lib.io.Tristate`, `target=`→`io=`
-      - (⊕) `TSTriple` → `.lib.io.TSTriple`, `bits_sign=`→`shape=`
+      - (⊕) `TSTriple` **obs** → `.hdl.rec.Record` + `.lib.io.triple_layout()`
       - (⊕) `Instance` → `.hdl.ir.Instance`
       - (⊕) `Memory` id
         - (⊕) `.get_port` **obs** → `.read_port()` + `.write_port()`

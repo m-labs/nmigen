@@ -854,8 +854,11 @@ def convert_fragment(builder, fragment, hierarchy):
     return module.name, port_map
 
 
-def convert(fragment, name="top", **kwargs):
-    fragment = ir.Fragment.get(fragment, platform=None).prepare(**kwargs)
+def convert(fragment, name="top", platform=None, **kwargs):
+    fragment = ir.Fragment.get(fragment, platform)
+    if platform is not None:
+        kwargs['ports'] = kwargs.get('ports', []) + platform.get_ports()
+    fragment = fragment.prepare(**kwargs)
     builder = _Builder()
     convert_fragment(builder, fragment, hierarchy=(name,))
     return str(builder)

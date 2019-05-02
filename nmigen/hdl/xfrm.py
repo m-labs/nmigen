@@ -13,6 +13,7 @@ from .rec import *
 __all__ = ["ValueVisitor", "ValueTransformer",
            "StatementVisitor", "StatementTransformer",
            "FragmentTransformer",
+           "TransformedElaboratable",
            "DomainRenamer", "DomainLowerer",
            "SampleDomainInjector", "SampleLowerer",
            "SwitchCleaner", "LHSGroupAnalyzer", "LHSGroupFilter",
@@ -88,7 +89,8 @@ class ValueVisitor(metaclass=ABCMeta):
             new_value = self.on_AnySeq(value)
         elif type(value) is Signal:
             new_value = self.on_Signal(value)
-        elif type(value) is Record:
+        elif isinstance(value, Record):
+            # Uses `isinstance()` and not `type() is` to allow inheriting from Record.
             new_value = self.on_Record(value)
         elif type(value) is ClockSignal:
             new_value = self.on_ClockSignal(value)
@@ -242,8 +244,8 @@ class FragmentTransformer:
 
     def map_named_ports(self, fragment, new_fragment):
         if hasattr(self, "on_value"):
-            for name, value in fragment.named_ports.items():
-                new_fragment.named_ports[name] = self.on_value(value)
+            for name, (value, dir) in fragment.named_ports.items():
+                new_fragment.named_ports[name] = self.on_value(value), dir
         else:
             new_fragment.named_ports = OrderedDict(fragment.named_ports.items())
 
@@ -277,7 +279,36 @@ class FragmentTransformer:
         return new_fragment
 
     def __call__(self, value):
-        return self.on_fragment(value)
+        if isinstance(value, Fragment):
+            return self.on_fragment(value)
+        elif isinstance(value, TransformedElaboratable):
+            value._transforms_.append(self)
+            return value
+        elif hasattr(value, "elaborate"):
+            value = TransformedElaboratable(value)
+            value._transforms_.append(self)
+            return value
+        else:
+            raise AttributeError("Object '{!r}' cannot be elaborated".format(value))
+
+
+class TransformedElaboratable(Elaboratable):
+    def __init__(self, elaboratable):
+        assert hasattr(elaboratable, "elaborate")
+
+        # Fields prefixed and suffixed with underscore to avoid as many conflicts with the inner
+        # object as possible, since we're forwarding attribute requests to it.
+        self._elaboratable_ = elaboratable
+        self._transforms_   = []
+
+    def __getattr__(self, attr):
+        return getattr(self._elaboratable_, attr)
+
+    def elaborate(self, platform):
+        fragment = Fragment.get(self._elaboratable_, platform)
+        for transform in self._transforms_:
+            fragment = transform(fragment)
+        return fragment
 
 
 class DomainRenamer(FragmentTransformer, ValueTransformer, StatementTransformer):

@@ -1,12 +1,30 @@
-import warnings
+from abc import ABCMeta, abstractmethod
 from collections import defaultdict, OrderedDict
+import warnings
+import traceback
+import sys
 
 from ..tools import *
 from .ast import *
 from .cd import *
 
 
-__all__ = ["Fragment", "Instance", "DriverConflict"]
+__all__ = ["Elaboratable", "DriverConflict", "Fragment", "Instance"]
+
+
+class Elaboratable(metaclass=ABCMeta):
+    def __new__(cls, *args, **kwargs):
+        self = super().__new__(cls)
+        self._Elaboratable__traceback = traceback.extract_stack()[:-1]
+        self._Elaboratable__used      = False
+        return self
+
+    def __del__(self):
+        if hasattr(self, "_Elaboratable__used") and not self._Elaboratable__used:
+            print("Elaboratable created but never used\n",
+                  "Traceback (most recent call last):\n",
+                  *traceback.format_list(self._Elaboratable__traceback),
+                  file=sys.stderr, sep="")
 
 
 class DriverConflict(UserWarning):
@@ -16,15 +34,22 @@ class DriverConflict(UserWarning):
 class Fragment:
     @staticmethod
     def get(obj, platform):
-        if isinstance(obj, Fragment):
-            return obj
-        if hasattr(obj, "elaborate"):
-            frag = obj.elaborate(platform)
-        elif hasattr(obj, "get_fragment"): # :deprecated:
-            frag = obj.get_fragment(platform)
-        else:
-            raise AttributeError("Object '{!r}' cannot be elaborated".format(obj))
-        return Fragment.get(frag, platform)
+        while True:
+            if isinstance(obj, Fragment):
+                return obj
+            elif isinstance(obj, Elaboratable):
+                obj._Elaboratable__used = True
+                obj = obj.elaborate(platform)
+            elif hasattr(obj, "elaborate"):
+                warnings.warn(
+                    message="Class {!r} is an elaboratable that does not explicitly inherit from "
+                            "Elaboratable; doing so would improve diagnostics"
+                            .format(type(obj)),
+                    category=RuntimeWarning,
+                    stacklevel=2)
+                obj = obj.elaborate(platform)
+            else:
+                raise AttributeError("Object '{!r}' cannot be elaborated".format(obj))
 
     def __init__(self):
         self.ports = SignalDict()
@@ -319,16 +344,19 @@ class Fragment:
         # Collect all signals we're driving (on LHS of statements), and signals we're using
         # (on RHS of statements, or in clock domains).
         if isinstance(self, Instance):
-            # Named ports contain signals for input, output and bidirectional ports. Output
-            # and bidirectional ports are already added to the main port dict, however, for
-            # input ports this has to be done lazily as any expression is valid there, including
-            # ones with deferred resolution to signals, such as ClockSignal().
             self_driven = SignalSet()
             self_used   = SignalSet()
-            for named_port_used in union((p._rhs_signals() for p in self.named_ports.values()),
-                                         start=SignalSet()):
-                if named_port_used not in self.ports:
-                    self_used.add(named_port_used)
+            for port_name, (value, dir) in self.named_ports.items():
+                if dir == "i":
+                    for signal in value._rhs_signals():
+                        self_used.add(signal)
+                        self.add_ports(signal, dir="i")
+                if dir == "o":
+                    for signal in value._lhs_signals():
+                        self_driven.add(signal)
+                        self.add_ports(signal, dir="o")
+                if dir == "io":
+                    self.add_ports(value, dir="io")
         else:
             self_driven = union((s._lhs_signals() for s in self.statements), start=SignalSet())
             self_used   = union((s._rhs_signals() for s in self.statements), start=SignalSet())
@@ -390,24 +418,19 @@ class Instance(Fragment):
     def __init__(self, type, **kwargs):
         super().__init__()
 
-        self.type = type
-        self.parameters = OrderedDict()
+        self.type        = type
+        self.parameters  = OrderedDict()
         self.named_ports = OrderedDict()
 
         for kw, arg in kwargs.items():
             if kw.startswith("p_"):
                 self.parameters[kw[2:]] = arg
             elif kw.startswith("i_"):
-                self.named_ports[kw[2:]] = arg
-                # Unlike with "o_" and "io_", "i_" ports can be assigned an arbitrary value;
-                # this includes unresolved ClockSignals etc. We rely on Fragment.prepare to
-                # populate fragment ports for these named ports.
+                self.named_ports[kw[2:]] = (arg, "i")
             elif kw.startswith("o_"):
-                self.named_ports[kw[2:]] = arg
-                self.add_ports(arg, dir="o")
+                self.named_ports[kw[2:]] = (arg, "o")
             elif kw.startswith("io_"):
-                self.named_ports[kw[3:]] = arg
-                self.add_ports(arg, dir="io")
+                self.named_ports[kw[3:]] = (arg, "io")
             else:
                 raise NameError("Instance argument '{}' does not start with p_, i_, o_, or io_"
                                 .format(arg))

@@ -9,7 +9,7 @@ from .ir import *
 from .xfrm import *
 
 
-__all__ = ["Module", "SyntaxError", "SyntaxWarning"]
+__all__ = ["SyntaxError", "SyntaxWarning", "Module"]
 
 
 class SyntaxError(Exception):
@@ -109,7 +109,7 @@ class FSM:
         return self.state == self.encoding[name]
 
 
-class Module(_ModuleBuilderRoot):
+class Module(_ModuleBuilderRoot, Elaboratable):
     def __init__(self):
         _ModuleBuilderRoot.__init__(self, self, depth=0)
         self.submodules    = _ModuleBuilderSubmodules(self)
@@ -368,14 +368,8 @@ class Module(_ModuleBuilderRoot):
 
     def _add_submodule(self, submodule, name=None):
         if not hasattr(submodule, "elaborate"):
-            if hasattr(submodule, "get_fragment"): # :deprecated:
-                warnings.warn("Adding '{!r}', which implements .get_fragment() but not "
-                              ".elaborate(), as a submodule. .get_fragment() is deprecated, "
-                              "and .elaborate() should be provided instead.".format(submodule),
-                              DeprecationWarning, stacklevel=2)
-            else:
-                raise TypeError("Trying to add '{!r}', which does not implement .elaborate(), as "
-                                "a submodule".format(submodule))
+            raise TypeError("Trying to add '{!r}', which does not implement .elaborate(), as "
+                            "a submodule".format(submodule))
         self._submodules.append((submodule, name))
 
     def _add_domain(self, cd):
@@ -384,14 +378,6 @@ class Module(_ModuleBuilderRoot):
     def _flush(self):
         while self._ctrl_stack:
             self._pop_ctrl()
-
-    @deprecated("`m.get_fragment(...)` is deprecated; use `m` instead")
-    def get_fragment(self, platform): # :deprecated:
-        return self.elaborate(platform)
-
-    @deprecated("`m.lower(...)` is deprecated; use `m` instead")
-    def lower(self, platform): # :deprecated:
-        return self.elaborate(platform)
 
     def elaborate(self, platform):
         self._flush()

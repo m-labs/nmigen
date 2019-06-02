@@ -139,6 +139,6 @@ class TinyProgrammerMixin:
         tinyprog  = os.environ.get("TINYPROG", "tinyprog")
         options   = ["-p"]
         bitstream = products.get("{}.bin".format(name))
-        with tempfile.NamedTemporaryFile(prefix="nmigen_tinyprog_") as bitstream_file:
+        with tempfile.NamedTemporaryFile(prefix="nmigen_tinyprog_",suffix=".bin") as bitstream_file:
             bitstream_file.write(bitstream)
             subprocess.run([tinyprog, *options, bitstream_file.name], check=True)

@@ -136,7 +136,7 @@ class IceBurnProgrammerMixin:
 
 class TinyProgrammerMixin:
     def toolchain_program(self, products, name):
-        tinyprog= os.environ.get("ICEPROG", "tinyprog")
+        tinyprog= os.environ.get("TINYPROG", "tinyprog")
         options = ["-p"]
         bitstream = products.get("{}.bin".format(name))
         with tempfile.NamedTemporaryFile(prefix="nmigen_tinyprog_") as bitstream_file:

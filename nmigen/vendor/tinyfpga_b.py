@@ -31,4 +31,3 @@ class TinyFPGABPlatform(TinyProgrammerMixin, LatticeICE40Platform):
             extras=["IO_STANDARD=SB_LVCMOS33"]
         ),
     ]
-    prog_mode = "flash"

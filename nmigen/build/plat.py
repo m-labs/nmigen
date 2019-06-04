@@ -85,6 +85,12 @@ class Platform(ConstraintManager, metaclass=ABCMeta):
 
         self._prepared   = False
 
+        self.extend()
+
+    def extend(self):
+        "add resources and config in subclass"
+        pass
+
     def add_file(self, filename, content):
         if not isinstance(filename, str):
             raise TypeError("File name must be a string")

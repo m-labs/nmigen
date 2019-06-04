@@ -21,6 +21,8 @@ class TSTriple:
                          name=None if name is None else name + "_oe")
         self.i  = Signal(bits_sign, min=min, max=max, reset=reset_i,
                          name=None if name is None else name + "_i")
+        self.xdr = 0
+        self.dir = ""
 
     def __len__(self):
         return len(self.o)
@@ -40,7 +42,7 @@ class Tristate(Elaboratable):
 
     def elaborate(self, platform):
         if hasattr(platform, "get_tristate"):
-            return platform.get_tristate(self.triple, self.target)
+            return platform.get_tristate(self.triple, self.target, {})
 
         m = Module()
         m.d.comb += self.triple.i.eq(self.target)

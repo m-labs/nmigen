@@ -229,8 +229,9 @@ class BusSynchronizer(Elaboratable):
         ack_o = Signal()
         ack_i = Signal()
 
+        # Extra flop on i->o to avoid race between data and request
         sync_io = m.submodules.sync_io = \
-            PulseSynchronizer(self.idomain, self.odomain, self.sync_stages)
+            PulseSynchronizer(self.idomain, self.odomain, self.sync_stages + 1)
         sync_oi = m.submodules.sync_oi = \
             PulseSynchronizer(self.odomain, self.idomain, self.sync_stages)
 
@@ -256,7 +257,7 @@ class BusSynchronizer(Elaboratable):
         with m.If(ack_i):
             m.d[self.idomain] += buf_i.eq(self.i)
         sync_data = m.submodules.sync_data = \
-            MultiReg(buf_i, buf_o, odomain=self.odomain, n=self.sync_stages - 1)
+            MultiReg(buf_i, buf_o, odomain=self.odomain, n=self.sync_stages)
         with m.If(ack_o):
             m.d[self.odomain] += self.o.eq(buf_o)
 

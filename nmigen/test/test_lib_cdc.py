@@ -193,8 +193,8 @@ class BusSynchronizerTestCase(FHDLTestCase):
                 for i in range(10):
                     testval = i % (2 ** width)
                     yield bs.i.eq(testval)
-                    # 6-cycle round trip, and if one in progress, must complete first:
-                    for j in range(11):
+                    # 7-cycle round trip, and if one in progress, must complete first:
+                    for j in range(13):
                         yield Tick()
                     self.assertEqual((yield bs.o), testval)
             sim.add_process(process)

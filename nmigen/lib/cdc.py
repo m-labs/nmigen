@@ -98,7 +98,7 @@ class ResetSynchronizer(Elaboratable):
     domain : str
         Name of domain to synchronize reset to.
     n : int, >=1
-        Number of clock edges from input deassertion to output deassertion
+        Number of metastability flops between input and output
 
     Override
     --------

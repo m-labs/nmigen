@@ -335,46 +335,46 @@ class Gearbox(Elaboratable):
 
     Parameters
     ----------
-    iwidth : int
+    width_i : int
         Bit width of the input
     cd_i : str
         Name of input clock domain
-    owidth : int
+    width_o : int
         Bit width of the output
     cd_o : str
         Name of output clock domain
 
     Attributes
     ----------
-    i : Signal(iwidth), in
+    i : Signal(width_i), in
         Input datastream. Sampled on every input clock.
-    o : Signal(owidth), out
+    o : Signal(width_o), out
         Output datastream. Transitions on every output clock.
     """
-    def __init__(self, iwidth, cd_i, owidth, cd_o):
-        if not isinstance(iwidth, int) or iwidth < 1:
-            raise TypeError("iwidth must be a positive integer, not '{!r}'".format(iwidth))
-        if not isinstance(owidth, int) or owidth < 1:
-            raise TypeError("owidth must be a positive integer, not '{!r}'".format(owidth))
+    def __init__(self, width_i, cd_i, width_o, cd_o):
+        if not isinstance(width_i, int) or width_i < 1:
+            raise TypeError("width_i must be a positive integer, not '{!r}'".format(width_i))
+        if not isinstance(width_o, int) or width_o < 1:
+            raise TypeError("width_o must be a positive integer, not '{!r}'".format(width_o))
 
-        self.i = Signal(iwidth)
-        self.o = Signal(owidth)
-        self.iwidth = iwidth
+        self.i = Signal(width_i)
+        self.o = Signal(width_o)
+        self.width_i = width_i
         self.cd_i = cd_i
-        self.owidth = owidth
+        self.width_o = width_o
         self.cd_o = cd_o
 
-        storagesize = iwidth * owidth // gcd(iwidth, owidth)
-        while storagesize // iwidth < 4:
+        storagesize = width_i * width_o // gcd(width_i, width_o)
+        while storagesize // width_i < 4:
             storagesize *= 2
-        while storagesize // owidth < 4:
+        while storagesize // width_o < 4:
             storagesize *= 2
 
         self._storagesize = storagesize
-        self._ichunks = storagesize // self.iwidth
-        self._ochunks = storagesize // self.owidth
-        assert(self._ichunks * self.iwidth == storagesize)
-        assert(self._ochunks * self.owidth == storagesize)
+        self._ichunks = storagesize // self.width_i
+        self._ochunks = storagesize // self.width_o
+        assert(self._ichunks * self.width_i == storagesize)
+        assert(self._ochunks * self.width_o == storagesize)
 
     def elaborate(self, platform):
         m = Module()
@@ -389,13 +389,13 @@ class Gearbox(Elaboratable):
 
         with m.Switch(iptr):
             for n in range(self._ichunks):
-                s = slice(n * self.iwidth, (n + 1) * self.iwidth)
+                s = slice(n * self.width_i, (n + 1) * self.width_i)
                 with m.Case(n):
                     m.d[self.cd_i] += storage[s].eq(self.i)
 
         with m.Switch(optr):
             for n in range(self._ochunks):
-                s = slice(n * self.owidth, (n + 1) * self.owidth)
+                s = slice(n * self.width_o, (n + 1) * self.width_o)
                 with m.Case(n):
                     m.d[self.cd_o] += self.o.eq(storage[s])
 

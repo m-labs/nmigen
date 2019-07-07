@@ -6,10 +6,14 @@ from ..hdl.ir import *
 from ..build import *
 
 
-__all__ = ["XilinxSpartan6Platform"]
+__all__ = ["XilinxSpartan3APlatform", "XilinxSpartan6Platform"]
+
+# The interface to Spartan 3 and 6 are substantially the same. Handle
+# differences internally using one class and expose user-aliases for
+# convenience.
 
 
-class XilinxSpartan6Platform(TemplatedPlatform):
+class XilinxSpartan3Or6Platform(TemplatedPlatform):
     """
     Required tools:
         * ISE toolchain:
@@ -45,7 +49,8 @@ class XilinxSpartan6Platform(TemplatedPlatform):
         * ``{{name}}_par.ncd``: place and routed netlist.
         * ``{{name}}.drc``: DRC report.
         * ``{{name}}.bgn``: BitGen log.
-        * ``{{name}}.bit``: binary bitstream.
+        * ``{{name}}.bit``: binary bitstream with metadata.
+        * ``{{name}}.bin``: raw binary bitstream.
     """
 
     toolchain = "ISE"
@@ -76,6 +81,10 @@ class XilinxSpartan6Platform(TemplatedPlatform):
             -ifn {{name}}.prj
             -ofn {{name}}.ngc
             -top {{name}}
+            {% if platform.family in ["3", "3E", "3A"] %}
+            -use_new_parser yes
+            {% endif %}
+            -register_balancing yes
             -p {{platform.device}}{{platform.package}}-{{platform.speed}}
             {{get_override("script_after_run")|default("# (script_after_run placeholder)")}}
         """,
@@ -126,11 +135,27 @@ class XilinxSpartan6Platform(TemplatedPlatform):
         """,
         r"""
         {{get_tool("bitgen")}}
-            {{get_override("bitgen_opts")|default(["-w"])|options}}
+            {{get_override("bitgen_opts")|default(["-g Binary:Yes -w"])|options}}
             {{name}}_par.ncd
             {{name}}.bit
         """
     ]
+
+    @property
+    def family(self):
+        if self.device.startswith("xc3s"):
+            if self.device.endswith("a"):
+                return "3A"
+            elif self.device.endswith("e"):
+                raise NotImplementedError("""Spartan 3E family is not supported
+                                           as a nMigen platform.""")
+            else:
+                raise NotImplementedError("""Spartan 3 family is not supported
+                                           as a nMigen platform.""")
+        elif self.device.startswith("xc6s"):
+            return "6"
+        else:
+            assert False
 
     def _get_xdr_buffer(self, m, pin, i_invert=None, o_invert=None):
         def get_dff(clk, d, q):
@@ -353,3 +378,7 @@ class XilinxSpartan6Platform(TemplatedPlatform):
                 io_IO=p_port[bit], io_IOB=n_port[bit]
             )
         return m
+
+
+XilinxSpartan3APlatform = XilinxSpartan3Or6Platform
+XilinxSpartan6Platform = XilinxSpartan3Or6Platform

@@ -135,7 +135,8 @@ class XilinxSpartan3Or6Platform(TemplatedPlatform):
         """,
         r"""
         {{get_tool("bitgen")}}
-            {{get_override("bitgen_opts")|default(["-g Binary:Yes -w"])|options}}
+            {{get_override("bitgen_opts")|default(["-w"])|options}}
+            -g Binary:Yes
             {{name}}_par.ncd
             {{name}}.bit
         """
@@ -143,16 +144,17 @@ class XilinxSpartan3Or6Platform(TemplatedPlatform):
 
     @property
     def family(self):
-        if self.device.startswith("xc3s"):
-            if self.device.endswith("a"):
+        device = self.device.upper()
+        if device.startswith("XC3S"):
+            if device.endswith("A"):
                 return "3A"
-            elif self.device.endswith("e"):
+            elif device.endswith("E"):
                 raise NotImplementedError("""Spartan 3E family is not supported
                                            as a nMigen platform.""")
             else:
                 raise NotImplementedError("""Spartan 3 family is not supported
                                            as a nMigen platform.""")
-        elif self.device.startswith("xc6s"):
+        elif device.startswith("XC6S"):
             return "6"
         else:
             assert False

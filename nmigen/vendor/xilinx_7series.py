@@ -43,7 +43,7 @@ class Xilinx7SeriesPlatform(TemplatedPlatform):
         * ``{{name}}_power.rpt``: Vivado report.
         * ``{{name}}_route.dcp``: Vivado design checkpoint.
         * ``{{name}}.bit``: binary bitstream with metadata.
-        * ``{{name}}.bin``:  binary bitstream.
+        * ``{{name}}.bin``: binary bitstream.
     """
 
     toolchain = "Vivado"

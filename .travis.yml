@@ -24,3 +24,7 @@ script:
   - python setup.py develop
   - coverage run -m unittest discover
   - codecov
+matrix:
+  fast_finish: true
+  allow_failures:
+  - python: "pypy3"

@@ -429,7 +429,7 @@ class Module(_ModuleBuilderRoot, Elaboratable):
             self._anon_submodules.append(submodule)
         else:
             if name in self._named_submodules:
-                raise ValueError("Submodule named '{}' already exists".format(name))
+                raise NameError("Submodule named '{}' already exists".format(name))
             self._named_submodules[name] = submodule
 
     def _get_submodule(self, name):

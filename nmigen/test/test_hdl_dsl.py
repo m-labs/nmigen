@@ -555,7 +555,7 @@ class DSLTestCase(FHDLTestCase):
         m1 = Module()
         m2 = Module()
         m1.submodules.foo = m2
-        with self.assertRaises(ValueError, msg="Submodule named 'foo' already exists"):
+        with self.assertRaises(NameError, msg="Submodule named 'foo' already exists"):
             m1.submodules.foo = m2
 
     def test_submodule_get(self):

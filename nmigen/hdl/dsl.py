@@ -130,7 +130,7 @@ class Module(_ModuleBuilderRoot, Elaboratable):
         self._ctrl_stack   = []
 
         self._driving      = SignalDict()
-        self._submodules   = {}
+        self._named_submodules   = {}
         self._anon_submodules = []
         self._domains      = []
         self._generated    = {}
@@ -428,13 +428,13 @@ class Module(_ModuleBuilderRoot, Elaboratable):
         if name == None:
             self._anon_submodules.append(submodule)
         else:
-            if name in self._submodules:
+            if name in self._named_submodules:
                 raise ValueError("Submodule named '{}' already exists".format(name))
-            self._submodules[name] = submodule
+            self._named_submodules[name] = submodule
 
     def _get_submodule(self, name):
-        if name in self._submodules:
-            return self._submodules[name]
+        if name in self._named_submodules:
+            return self._named_submodules[name]
         else:
             raise AttributeError("No submodule named '{}' exists".format(name))
 
@@ -449,8 +449,8 @@ class Module(_ModuleBuilderRoot, Elaboratable):
         self._flush()
 
         fragment = Fragment()
-        for name in self._submodules:
-            fragment.add_subfragment(Fragment.get(self._submodules[name], platform), name)
+        for name in self._named_submodules:
+            fragment.add_subfragment(Fragment.get(self._named_submodules[name], platform), name)
         for submodule in self._anon_submodules:
             fragment.add_subfragment(Fragment.get(submodule, platform), None)
         statements = SampleDomainInjector("sync")(self._statements)

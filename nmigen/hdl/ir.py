@@ -67,7 +67,10 @@ class Fragment:
                     stacklevel=2)
                 obj = obj.elaborate(platform)
             else:
-                raise AttributeError("Object '{!r}' cannot be elaborated".format(obj))
+                if obj is not None:
+                    raise AttributeError("Object '{!r}' cannot be elaborated".format(obj))
+                else:
+                    raise AttributeError("Object '{!r}' cannot be elaborated. Possible root cause: perhaps 'elaborate' doesn't return a module?".format(obj))
 
     def __init__(self):
         self.ports = SignalDict()

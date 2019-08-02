@@ -10,7 +10,7 @@ from .tools import *
 class FragmentGetTestCase(FHDLTestCase):
     def test_get_wrong(self):
         with self.assertRaises(AttributeError,
-                msg="Object 'None' cannot be elaborated"):
+                msg="Object 'None' cannot be elaborated. Possible root cause: perhaps 'elaborate' doesn't return a module?"):
             Fragment.get(None, platform=None)
 
 

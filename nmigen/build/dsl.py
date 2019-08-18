@@ -246,7 +246,6 @@ class Connector:
 
         self.mapping = mapping
 
-
     def __repr__(self):
         return "(connector {} {} {})".format(self.name, self.number,
                                              " ".join("{}=>{}".format(conn, plat)

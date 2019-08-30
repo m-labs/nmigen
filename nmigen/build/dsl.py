@@ -92,7 +92,7 @@ def DiffPairsN(*args, **kwargs):
 class Attrs(OrderedDict):
     def __init__(self, **attrs):
         for key, value in attrs.items():
-            if not (value is None or isinstance(value, str) or hasattr(value, "__call__")):
+            if not (value is None or isinstance(value, (str, int)) or hasattr(value, "__call__")):
                 raise TypeError("Value of attribute {} must be None, str, or callable, not {!r}"
                                 .format(key, value))
 
@@ -103,6 +103,8 @@ class Attrs(OrderedDict):
         for key, value in self.items():
             if value is None:
                 items.append("!" + key)
+            elif isinstance(value, int):
+                items.append(key + "=" + value)
             elif hasattr(value, "__call__"):
                 items.append(key + "=" + repr(value))
             else:

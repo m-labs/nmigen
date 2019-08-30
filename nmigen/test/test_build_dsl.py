@@ -124,10 +124,13 @@ class AttrsTestCase(FHDLTestCase):
         self.assertEqual(a["FOO"], fn)
         self.assertEqual(repr(a), "(attrs FOO={!r})".format(fn))
 
-    def test_wrong_value(self):
-        with self.assertRaises(TypeError,
-                msg="Value of attribute FOO must be None, str, or callable, not 1"):
-            a = Attrs(FOO=1)
+    # DRAFT - test no longer needed since 1 (int) would now be a valid value
+    # (needed in the context of PULLUP=1 in the UART board definition).
+    #
+    # def test_wrong_value(self):
+    #     with self.assertRaises(TypeError,
+    #         msg="Value of attribute FOO must be None, str, or callable, not 1"):
+    #         a = Attrs(FOO=1)
 
 
 class ClockTestCase(FHDLTestCase):

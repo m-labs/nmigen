@@ -297,12 +297,15 @@ class DSLTestCase(FHDLTestCase):
                 m.d.comb += self.c1.eq(1)
             with m.Case("11--"):
                 m.d.comb += self.c2.eq(1)
+            with m.Case("10??"):
+                m.d.comb += self.c2.eq(1)
         m._flush()
         self.assertRepr(m._statements, """
         (
             (switch (sig w1)
                 (case 0011 (eq (sig c1) (const 1'd1)))
                 (case 11-- (eq (sig c2) (const 1'd1)))
+                (case 10-- (eq (sig c2) (const 1'd1)))
             )
         )
         """)

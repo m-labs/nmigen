@@ -273,6 +273,8 @@ class Module(_ModuleBuilderRoot, Elaboratable):
                               .format(value, len(switch_data["test"])),
                               SyntaxWarning, stacklevel=3)
                 continue
+            if isinstance(value, str):
+                value = value.replace("?", "-")
             new_values = (*new_values, value)
         try:
             _outer_case, self._statements = self._statements, []

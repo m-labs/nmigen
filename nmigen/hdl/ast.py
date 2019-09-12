@@ -237,6 +237,44 @@ class Value(metaclass=ABCMeta):
         """
         return Assign(self, value, src_loc_at=1)
 
+    def matches(self, value):
+        """Predicate for matching.
+
+        Matches the ``Value`` against the given value.
+
+        Parameters
+        ----------
+        value : int or str or Const
+            The value to be matched against. If an integer or Const, then its
+            width in bits must be equal to or less than the width of this
+            ``Value``. If a string, then it must be a string of binary digits
+            (including `-` as the don't-care value) of the same width as this
+            ``Value``.
+
+        Returns
+        -------
+        Operator
+            The ``Operator`` representing the match.
+        """
+        n = len(self)
+        if isinstance(value, int):
+            if bits_for(value) > n:
+                warnings.warn("Match value '{:b}' is wider than matched (which has width {}); "
+                              "comparison will never be true"
+                              .format(value, n),
+                              SyntaxWarning, stacklevel=3)
+            return Operator("==", [self, value])
+        if isinstance(value, str):
+            if len(value) != n:
+                raise SyntaxError("Match value '{}' must have the same width as matched (which is {})"
+                                    .format(value, n))
+            if not all(c in "01-" for c in value):
+                raise SyntaxError("Match value '{}' must contain only 0, 1, or -".format(value))
+            mask = Const(int(value.replace("0", "1").replace("-", "0"), 2))
+            comparand = Const(int(value.replace("-", "0"), 2))
+            return Operator("==", [Operator("&", [self, mask]), comparand])
+        raise SyntaxError("matches() only accepts strings and integers")
+
     @abstractmethod
     def shape(self):
         """Bit length and signedness of a value.

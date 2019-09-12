@@ -63,6 +63,39 @@ class ValueTestCase(FHDLTestCase):
                 msg="Cannot index value with 'str'"):
             Const(31)["str"]
 
+    def test_matches_int(self):
+        s = Const(0b101) # 3'd5
+        p = Const(0b110) # 3'd6
+        m = s.matches(p)
+        self.assertEqual(repr(m), "(== (const 3'd5) (const 3'd6))")
+
+    def test_matches_str(self):
+        s = Const(0b101) # 3'd5
+        p = "10-"        # mask 3'd6, comparand 3'd4
+        m = s.matches(p)
+        self.assertEqual(repr(m), "(== (& (const 3'd5) (const 3'd6)) (const 3'd4))")
+
+    def test_matches_str_wrong_size(self):
+        with self.assertRaises(TypeError,
+                msg="Match value '1-' must have the same width as matched (which is 3)"):
+            s = Const(0b101)
+            p = "1-"
+            m = s.matches(p)
+
+    def test_matches_str_bad_content(self):
+        with self.assertRaises(TypeError,
+                msg="Match value 'cat' must contain only 0, 1, or -"):
+            s = Const(0b101)
+            p = "cat"
+            m = s.matches(p)
+
+    def test_matches_wrong_type(self):
+        with self.assertRaises(TypeError,
+                msg="matches() only accepts strings and integers"):
+            s = Const(0b101)
+            p = 1.0
+            m = s.matches(p)
+
 
 class ConstTestCase(FHDLTestCase):
     def test_shape(self):

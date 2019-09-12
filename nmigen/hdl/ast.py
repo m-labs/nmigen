@@ -258,7 +258,9 @@ class Value(metaclass=ABCMeta):
         """
         n = len(self)
         if isinstance(value, int):
-            if bits_for(value) > n:
+            value = Const(value)
+        if isinstance(value, Const):
+            if len(value) > n:
                 warnings.warn("Match value '{:b}' is wider than matched (which has width {}); "
                               "comparison will never be true"
                               .format(value, n),

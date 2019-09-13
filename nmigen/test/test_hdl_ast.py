@@ -63,12 +63,6 @@ class ValueTestCase(FHDLTestCase):
                 msg="Cannot index value with 'str'"):
             Const(31)["str"]
 
-    def test_matches_const(self):
-        s = Const(0b101) # 3'd5
-        p = Const(0b110) # 3'd6
-        m = s.matches(p)
-        self.assertEqual(repr(m), "(== (const 3'd5) (const 3'd6))")
-
     def test_matches_int(self):
         s = Const(0b101) # 3'd5
         m = s.matches(6)

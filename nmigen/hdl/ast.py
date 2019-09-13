@@ -214,12 +214,11 @@ class Value(metaclass=ABCMeta):
 
         Parameters
         ----------
-        value : int or str or Const
-            The value to be matched against. If an integer or Const, then its
-            width in bits must be equal to or less than the width of this
-            ``Value``. If a string, then it must be a string of binary digits
-            (including `-` as the don't-care value) of the same width as this
-            ``Value``.
+        value : int or str
+            The value to be matched against. If an integer, then its width
+            in bits must be equal to or less than the width of this ``Value``.
+            If a string, then it must be a string of binary digits (including
+            `-` as the don't-care value) of the same width as this ``Value``.
 
         Returns
         -------
@@ -228,9 +227,7 @@ class Value(metaclass=ABCMeta):
         """
         n = len(self)
         if isinstance(value, int):
-            value = Const(value)
-        if isinstance(value, Const):
-            if len(value) > n:
+            if bits_for(value) > n:
                 warnings.warn("Match value '{:b}' is wider than matched (which has width {}); "
                               "comparison will never be true"
                               .format(value, n),

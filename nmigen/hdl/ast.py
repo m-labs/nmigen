@@ -232,16 +232,16 @@ class Value(metaclass=ABCMeta):
                               "comparison will never be true"
                               .format(value, n),
                               SyntaxWarning, stacklevel=3)
-            return Operator("==", [self, value])
+            return self == value
         if isinstance(value, str):
             if len(value) != n:
                 raise SyntaxError("Match value '{}' must have the same width as matched (which is {})"
                                     .format(value, n))
             if not all(c in "01-" for c in value):
                 raise SyntaxError("Match value '{}' must contain only 0, 1, or -".format(value))
-            mask = Const(int(value.replace("0", "1").replace("-", "0"), 2))
-            comparand = Const(int(value.replace("-", "0"), 2))
-            return Operator("==", [Operator("&", [self, mask]), comparand])
+            mask = int(value.replace("0", "1").replace("-", "0"), 2)
+            comparand = int(value.replace("-", "0"), 2)
+            return (self & mask) == comparand
         raise SyntaxError("matches() only accepts strings and integers")
 
     @abstractmethod

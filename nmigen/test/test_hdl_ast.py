@@ -11,13 +11,13 @@ class ValueTestCase(FHDLTestCase):
         self.assertIsInstance(Value.wrap(True), Const)
         c = Const(0)
         self.assertIs(Value.wrap(c), c)
-        with self.assertRaises(TypeError,
-                msg="Object ''str'' is not an nMigen value"):
+        with self.assertRaises(
+                TypeError, msg="Object ''str'' is not an nMigen value"):
             Value.wrap("str")
 
     def test_bool(self):
-        with self.assertRaises(TypeError,
-                msg="Attempted to convert nMigen value to boolean"):
+        with self.assertRaises(
+                TypeError, msg="Attempted to convert nMigen value to boolean"):
             if Const(0):
                 pass
 
@@ -33,8 +33,8 @@ class ValueTestCase(FHDLTestCase):
         self.assertIsInstance(s2, Slice)
         self.assertEqual(s2.start, 3)
         self.assertEqual(s2.end, 4)
-        with self.assertRaises(IndexError,
-                msg="Cannot index 5 bits into 4-bit value"):
+        with self.assertRaises(
+                IndexError, msg="Cannot index 5 bits into 4-bit value"):
             Const(10)[5]
 
     def test_getitem_slice(self):
@@ -59,8 +59,7 @@ class ValueTestCase(FHDLTestCase):
         self.assertEqual(s3.parts[2].end, 5)
 
     def test_getitem_wrong(self):
-        with self.assertRaises(TypeError,
-                msg="Cannot index value with 'str'"):
+        with self.assertRaises(TypeError, msg="Cannot index value with 'str'"):
             Const(31)["str"]
 
     def test_matches_int(self):
@@ -117,17 +116,18 @@ class ValueTestCase(FHDLTestCase):
 
 class ConstTestCase(FHDLTestCase):
     def test_shape(self):
-        self.assertEqual(Const(0).shape(),   (1, False))
-        self.assertEqual(Const(1).shape(),   (1, False))
-        self.assertEqual(Const(10).shape(),  (4, False))
+        self.assertEqual(Const(0).shape(), (1, False))
+        self.assertEqual(Const(1).shape(), (1, False))
+        self.assertEqual(Const(10).shape(), (4, False))
         self.assertEqual(Const(-10).shape(), (5, True))
 
-        self.assertEqual(Const(1, 4).shape(),          (4, False))
-        self.assertEqual(Const(1, (4, True)).shape(),  (4, True))
+        self.assertEqual(Const(1, 4).shape(), (4, False))
+        self.assertEqual(Const(1, (4, True)).shape(), (4, True))
         self.assertEqual(Const(0, (0, False)).shape(), (0, False))
 
     def test_shape_bad(self):
-        with self.assertRaises(TypeError,
+        with self.assertRaises(
+                TypeError,
                 msg="Width must be a non-negative integer, not '-1'"):
             Const(1, -1)
 
@@ -138,7 +138,7 @@ class ConstTestCase(FHDLTestCase):
         self.assertEqual(Const(10).value, 10)
 
     def test_repr(self):
-        self.assertEqual(repr(Const(10)),  "(const 4'd10)")
+        self.assertEqual(repr(Const(10)), "(const 4'd10)")
         self.assertEqual(repr(Const(-10)), "(const 5'sd-10)")
 
     def test_hash(self):
@@ -286,9 +286,10 @@ class OperatorTestCase(FHDLTestCase):
         self.assertEqual(v.shape(), (1, False))
 
     def test_mux(self):
-        s  = Const(0)
+        s = Const(0)
         v1 = Mux(s, Const(0, (4, False)), Const(0, (6, False)))
-        self.assertEqual(repr(v1), "(m (const 1'd0) (const 4'd0) (const 6'd0))")
+        self.assertEqual(
+            repr(v1), "(m (const 1'd0) (const 4'd0) (const 6'd0))")
         self.assertEqual(v1.shape(), (6, False))
         v2 = Mux(s, Const(0, (4, True)), Const(0, (6, True)))
         self.assertEqual(v2.shape(), (6, True))
@@ -327,30 +328,30 @@ class SliceTestCase(FHDLTestCase):
         self.assertEqual(s2.shape(), (2, False))
 
     def test_start_end_negative(self):
-        c  = Const(0, 8)
+        c = Const(0, 8)
         s1 = Slice(c, 0, -1)
         self.assertEqual((s1.start, s1.end), (0, 7))
         s1 = Slice(c, -4, -1)
         self.assertEqual((s1.start, s1.end), (4, 7))
 
     def test_start_end_wrong(self):
-        with self.assertRaises(TypeError,
-                msg="Slice start must be an integer, not ''x''"):
+        with self.assertRaises(
+                TypeError, msg="Slice start must be an integer, not ''x''"):
             Slice(0, "x", 1)
-        with self.assertRaises(TypeError,
-                msg="Slice end must be an integer, not ''x''"):
+        with self.assertRaises(
+                TypeError, msg="Slice end must be an integer, not ''x''"):
             Slice(0, 1, "x")
 
     def test_start_end_out_of_range(self):
         c = Const(0, 8)
-        with self.assertRaises(IndexError,
-                msg="Cannot start slice 10 bits into 8-bit value"):
+        with self.assertRaises(
+                IndexError, msg="Cannot start slice 10 bits into 8-bit value"):
             Slice(c, 10, 12)
-        with self.assertRaises(IndexError,
-                msg="Cannot end slice 12 bits into 8-bit value"):
+        with self.assertRaises(
+                IndexError, msg="Cannot end slice 12 bits into 8-bit value"):
             Slice(c, 0, 12)
-        with self.assertRaises(IndexError,
-                msg="Slice start 4 must be less than slice end 2"):
+        with self.assertRaises(
+                IndexError, msg="Slice start 4 must be less than slice end 2"):
             Slice(c, 4, 2)
 
     def test_repr(self):
@@ -442,34 +443,43 @@ class ReplTestCase(FHDLTestCase):
 
 class ArrayTestCase(FHDLTestCase):
     def test_acts_like_array(self):
-        a = Array([1,2,3])
-        self.assertSequenceEqual(a, [1,2,3])
+        a = Array([1, 2, 3])
+        self.assertSequenceEqual(a, [1, 2, 3])
         self.assertEqual(a[1], 2)
         a[1] = 4
-        self.assertSequenceEqual(a, [1,4,3])
+        self.assertSequenceEqual(a, [1, 4, 3])
         del a[1]
-        self.assertSequenceEqual(a, [1,3])
+        self.assertSequenceEqual(a, [1, 3])
         a.insert(1, 2)
-        self.assertSequenceEqual(a, [1,2,3])
+        self.assertSequenceEqual(a, [1, 2, 3])
 
     def test_becomes_immutable(self):
-        a = Array([1,2,3])
+        a = Array([1, 2, 3])
         s1 = Signal.range(len(a))
         s2 = Signal.range(len(a))
         v1 = a[s1]
         v2 = a[s2]
-        with self.assertRaisesRegex(ValueError,
-                regex=r"^Array can no longer be mutated after it was indexed with a value at "):
+        with self.assertRaisesRegex(
+                ValueError,
+                regex=
+                r"^Array can no longer be mutated after it was indexed with a value at "
+        ):
             a[1] = 2
-        with self.assertRaisesRegex(ValueError,
-                regex=r"^Array can no longer be mutated after it was indexed with a value at "):
+        with self.assertRaisesRegex(
+                ValueError,
+                regex=
+                r"^Array can no longer be mutated after it was indexed with a value at "
+        ):
             del a[1]
-        with self.assertRaisesRegex(ValueError,
-                regex=r"^Array can no longer be mutated after it was indexed with a value at "):
+        with self.assertRaisesRegex(
+                ValueError,
+                regex=
+                r"^Array can no longer be mutated after it was indexed with a value at "
+        ):
             a.insert(1, 2)
 
     def test_repr(self):
-        a = Array([1,2,3])
+        a = Array([1, 2, 3])
         self.assertEqual(repr(a), "(array mutable [1, 2, 3])")
         s = Signal.range(len(a))
         v = a[s]
@@ -526,7 +536,8 @@ class SignalTestCase(FHDLTestCase):
         self.assertEqual(s11.shape(), (1, False))
         # deprecated
         with warnings.catch_warnings():
-            warnings.filterwarnings(action="ignore", category=DeprecationWarning)
+            warnings.filterwarnings(
+                action="ignore", category=DeprecationWarning)
             d6 = Signal(max=16)
             self.assertEqual(d6.shape(), (4, False))
             d7 = Signal(min=4, max=16)
@@ -539,21 +550,31 @@ class SignalTestCase(FHDLTestCase):
             self.assertEqual(d10.shape(), (0, False))
 
     def test_shape_bad(self):
-        with self.assertRaises(TypeError,
+        with self.assertRaises(
+                TypeError,
                 msg="Width must be a non-negative integer, not '-10'"):
             Signal(-10)
 
     def test_min_max_deprecated(self):
-        with self.assertWarns(DeprecationWarning,
-                msg="instead of `Signal(min=0, max=10)`, use `Signal.range(0, 10)`"):
+        with self.assertWarns(
+                DeprecationWarning,
+                msg=
+                "instead of `Signal(min=0, max=10)`, use `Signal.range(0, 10)`"
+        ):
             Signal(max=10)
         with warnings.catch_warnings():
-            warnings.filterwarnings(action="ignore", category=DeprecationWarning)
-            with self.assertRaises(ValueError,
-                    msg="Lower bound 10 should be less or equal to higher bound 4"):
+            warnings.filterwarnings(
+                action="ignore", category=DeprecationWarning)
+            with self.assertRaises(
+                    ValueError,
+                    msg=
+                    "Lower bound 10 should be less or equal to higher bound 4"
+            ):
                 Signal(min=10, max=4)
-            with self.assertRaises(ValueError,
-                    msg="Only one of bits/signedness or bounds may be specified"):
+            with self.assertRaises(
+                    ValueError,
+                    msg="Only one of bits/signedness or bounds may be specified"
+            ):
                 Signal(2, min=10)
 
     def test_name(self):
@@ -563,8 +584,8 @@ class SignalTestCase(FHDLTestCase):
         self.assertEqual(s2.name, "sig")
 
     def test_name_bad(self):
-        with self.assertRaises(TypeError,
-                msg="Name must be a string, not 'True'"):
+        with self.assertRaises(
+                TypeError, msg="Name must be a string, not 'True'"):
             # A common typo: forgetting to put parens around width and signedness
             Signal(1, True)
 
@@ -574,14 +595,23 @@ class SignalTestCase(FHDLTestCase):
         self.assertEqual(s1.reset_less, True)
 
     def test_reset_narrow(self):
-        with self.assertWarns(SyntaxWarning,
-                msg="Reset value 8 requires 4 bits to represent, but the signal only has 3 bits"):
+        with self.assertWarns(
+                SyntaxWarning,
+                msg=
+                "Reset value 8 requires 4 bits to represent, but the signal only has 3 bits"
+        ):
             Signal(3, reset=8)
-        with self.assertWarns(SyntaxWarning,
-                msg="Reset value 4 requires 4 bits to represent, but the signal only has 3 bits"):
+        with self.assertWarns(
+                SyntaxWarning,
+                msg=
+                "Reset value 4 requires 4 bits to represent, but the signal only has 3 bits"
+        ):
             Signal((3, True), reset=4)
-        with self.assertWarns(SyntaxWarning,
-                msg="Reset value -5 requires 4 bits to represent, but the signal only has 3 bits"):
+        with self.assertWarns(
+                SyntaxWarning,
+                msg=
+                "Reset value -5 requires 4 bits to represent, but the signal only has 3 bits"
+        ):
             Signal((3, True), reset=-5)
 
     def test_attrs(self):
@@ -615,8 +645,9 @@ class SignalTestCase(FHDLTestCase):
 
     def test_decoder(self):
         class Color(Enum):
-            RED  = 1
+            RED = 1
             BLUE = 2
+
         s = Signal(decoder=Color)
         self.assertEqual(s.decoder(1), "RED/1")
         self.assertEqual(s.decoder(3), "3")
@@ -629,8 +660,8 @@ class ClockSignalTestCase(FHDLTestCase):
         s2 = ClockSignal("pix")
         self.assertEqual(s2.domain, "pix")
 
-        with self.assertRaises(TypeError,
-                msg="Clock domain name must be a string, not '1'"):
+        with self.assertRaises(
+                TypeError, msg="Clock domain name must be a string, not '1'"):
             ClockSignal(1)
 
     def test_shape(self):
@@ -641,8 +672,8 @@ class ClockSignalTestCase(FHDLTestCase):
         self.assertEqual(repr(s1), "(clk sync)")
 
     def test_wrong_name_comb(self):
-        with self.assertRaises(ValueError,
-                msg="Domain 'comb' does not have a clock"):
+        with self.assertRaises(
+                ValueError, msg="Domain 'comb' does not have a clock"):
             ClockSignal("comb")
 
 
@@ -653,8 +684,8 @@ class ResetSignalTestCase(FHDLTestCase):
         s2 = ResetSignal("pix")
         self.assertEqual(s2.domain, "pix")
 
-        with self.assertRaises(TypeError,
-                msg="Clock domain name must be a string, not '1'"):
+        with self.assertRaises(
+                TypeError, msg="Clock domain name must be a string, not '1'"):
             ResetSignal(1)
 
     def test_shape(self):
@@ -665,8 +696,8 @@ class ResetSignalTestCase(FHDLTestCase):
         self.assertEqual(repr(s1), "(rst sync)")
 
     def test_wrong_name_comb(self):
-        with self.assertRaises(ValueError,
-                msg="Domain 'comb' does not have a reset"):
+        with self.assertRaises(
+                ValueError, msg="Domain 'comb' does not have a reset"):
             ResetSignal("comb")
 
 
@@ -674,7 +705,7 @@ class MockUserValue(UserValue):
     def __init__(self, lowered):
         super().__init__()
         self.lower_count = 0
-        self.lowered     = lowered
+        self.lowered = lowered
 
     def lower(self):
         self.lower_count += 1
@@ -702,19 +733,19 @@ class SampleTestCase(FHDLTestCase):
         s3 = Sample(ResetSignal(), 1, "sync")
 
     def test_wrong_value_operator(self):
-        with self.assertRaises(TypeError,
-                "Sampled value must be a signal or a constant, not "
+        with self.assertRaises(
+                TypeError, "Sampled value must be a signal or a constant, not "
                 "(+ (sig $signal) (const 1'd1))"):
             Sample(Signal() + 1, 1, "sync")
 
     def test_wrong_clocks_neg(self):
         with self.assertRaises(ValueError,
-                "Cannot sample a value 1 cycles in the future"):
+                               "Cannot sample a value 1 cycles in the future"):
             Sample(Signal(), -1, "sync")
 
     def test_wrong_domain(self):
         with self.assertRaises(TypeError,
-                "Domain name must be a string or None, not 0"):
+                               "Domain name must be a string or None, not 0"):
             Sample(Signal(), 1, 0)
 
 

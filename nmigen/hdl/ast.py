@@ -254,9 +254,8 @@ class Value(metaclass=ABCMeta):
 
         Returns
         -------
-        Operator or int
-            The ``Operator`` representing the match if the length of ``*values``
-            is 1 or more, otherwise the integer `0`.
+        Operator
+            The ``Operator`` representing the match.
         """
         n = len(self)
         operations = []
@@ -279,11 +278,7 @@ class Value(metaclass=ABCMeta):
                 operations.append((self & mask) == comparand)
             else:
                 raise SyntaxError("matches() only accepts strings and integers")
-        if len(operations) == 0:
-            return 0
-        if len(operations) == 1:
-            return operations[0]
-        return functools.reduce(lambda x, y: x|y, operations[1:], operations[0])
+        return Cat(operations).any()
 
     @abstractmethod
     def shape(self):

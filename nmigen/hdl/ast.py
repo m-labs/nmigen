@@ -1,5 +1,6 @@
 from abc import ABCMeta, abstractmethod
 import builtins
+import functools
 import traceback
 import warnings
 from collections import OrderedDict
@@ -207,42 +208,52 @@ class Value(metaclass=ABCMeta):
         """
         return Assign(self, value, src_loc_at=1)
 
-    def matches(self, value):
+    def matches(self, *values):
         """Predicate for matching.
 
-        Matches the ``Value`` against the given value.
+        Matches the ``Value`` against any of the given values.
 
         Parameters
         ----------
-        value : int or str
-            The value to be matched against. If an integer, then its width
+        *values :
+            Variable length value list. Each value is an int or str, which is
+            a value to be matched against. If an integer, then its width
             in bits must be equal to or less than the width of this ``Value``.
             If a string, then it must be a string of binary digits (including
             `-` as the don't-care value) of the same width as this ``Value``.
 
         Returns
         -------
-        Operator
-            The ``Operator`` representing the match.
+        Operator or int
+            The ``Operator`` representing the match if the length of ``*values``
+            is 1 or more, otherwise the integer `0`.
         """
         n = len(self)
-        if isinstance(value, int):
-            if bits_for(value) > n:
-                warnings.warn("Match value '{:b}' is wider than matched (which has width {}); "
-                              "comparison will never be true"
-                              .format(value, n),
-                              SyntaxWarning, stacklevel=3)
-            return self == value
-        if isinstance(value, str):
-            if len(value) != n:
-                raise SyntaxError("Match value '{}' must have the same width as matched (which is {})"
-                                    .format(value, n))
-            if not all(c in "01-" for c in value):
-                raise SyntaxError("Match value '{}' must contain only 0, 1, or -".format(value))
-            mask = int(value.replace("0", "1").replace("-", "0"), 2)
-            comparand = int(value.replace("-", "0"), 2)
-            return (self & mask) == comparand
-        raise SyntaxError("matches() only accepts strings and integers")
+        operations = []
+        for value in values:
+            if isinstance(value, int):
+                if bits_for(value) > n:
+                    warnings.warn("Match value '{:b}' is wider than matched (which has width {}); "
+                                "comparison will never be true"
+                                .format(value, n),
+                                SyntaxWarning, stacklevel=3)
+                operations.append(self == value)
+            elif isinstance(value, str):
+                if len(value) != n:
+                    raise SyntaxError("Match value '{}' must have the same width as matched (which is {})"
+                                        .format(value, n))
+                if not all(c in "01-" for c in value):
+                    raise SyntaxError("Match value '{}' must contain only 0, 1, or -".format(value))
+                mask = int(value.replace("0", "1").replace("-", "0"), 2)
+                comparand = int(value.replace("-", "0"), 2)
+                operations.append((self & mask) == comparand)
+            else:
+                raise SyntaxError("matches() only accepts strings and integers")
+        if len(operations) == 0:
+            return 0
+        if len(operations) == 1:
+            return operations[0]
+        return functools.reduce(lambda x, y: x|y, operations[1:], operations[0])
 
     @abstractmethod
     def shape(self):

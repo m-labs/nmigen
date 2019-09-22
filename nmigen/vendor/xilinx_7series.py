@@ -116,7 +116,7 @@ class Xilinx7SeriesPlatform(TemplatedPlatform):
             {% for signal, frequency in platform.iter_clock_constraints() -%}
                 create_clock -name {{signal.name}} -period {{1000000000/frequency}} [get_nets {{signal|hierarchy("/")}}]
             {% endfor %}
-            set_false_path -to [get_cells -hier -filter {nmigen_async_ff == TRUE}]
+            set_min_delay -1000.0 -to [get_cells -hier -filter {nmigen_async_ff == TRUE}]
             set_max_delay {{get_override("max_delay")|default("5.0")}} -to [get_cells -hier -filter {nmigen_async_ff == TRUE}]
             {{get_override("add_constraints")|default("# (add_constraints placeholder)")}}
         """

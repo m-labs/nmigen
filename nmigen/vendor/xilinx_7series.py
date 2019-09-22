@@ -24,6 +24,7 @@ class Xilinx7SeriesPlatform(TemplatedPlatform):
         * ``script_after_bitstream``: inserts commands after ``write_bitstream`` in Tcl script.
         * ``add_constraints``: inserts commands in XDC file.
         * ``vivado_opts``: adds extra options for ``vivado``.
+        * ``max_delay``: sets the maximum delay in nanoseconds for clock domain crossing constraints.
 
     Build products:
         * ``{{name}}.log``: Vivado log.
@@ -115,6 +116,8 @@ class Xilinx7SeriesPlatform(TemplatedPlatform):
             {% for signal, frequency in platform.iter_clock_constraints() -%}
                 create_clock -name {{signal.name}} -period {{1000000000/frequency}} [get_nets {{signal|hierarchy("/")}}]
             {% endfor %}
+            set_false_path -to [get_cells -hier -filter {nmigen_async_ff == TRUE}]
+            set_max_delay {{get_override("max_delay")|default("5.0")}} -to [get_cells -hier -filter {nmigen_async_ff == TRUE}]
             {{get_override("add_constraints")|default("# (add_constraints placeholder)")}}
         """
     }
@@ -363,8 +366,27 @@ class Xilinx7SeriesPlatform(TemplatedPlatform):
 
     def get_multi_reg(self, multireg):
         m = Module()
+        # the `nmigen_async_ff` attribute is used in the constraints file to find the
+        # first register in each MultiReg and add false path and max delay constraints
+        multireg._regs[0].attrs["nmigen_async_ff"]="TRUE"
         for i, o in zip((multireg.i, *multireg._regs), multireg._regs):
+            # Vivado uses the `ASYNC_REG` attribute to prevent SRL inferrence,
+            # in clock domain crossing reporting and for placement
             o.attrs["ASYNC_REG"] = "TRUE"
             m.d[multireg._o_domain] += o.eq(i)
         m.d.comb += multireg.o.eq(multireg._regs[-1])
+        return m
+
+    def get_reset_sync(self, resetsync):
+        m = Module()
+        m.domains += ClockDomain("reset_sync", async_reset=True, local=True)
+        resetsync._regs[0].attrs["nmigen_async_ff"]="TRUE"
+        for i, o in zip((0, *resetsync._regs), resetsync._regs):
+            o.attrs["ASYNC_REG"] = "TRUE"
+            m.d.reset_sync += o.eq(i)
+        m.d.comb += [
+            ClockSignal("reset_sync").eq(ClockSignal(resetsync._domain)),
+            ResetSignal("reset_sync").eq(resetsync.arst),
+            ResetSignal(resetsync._domain).eq(resetsync._regs[-1])
+        ]
         return m

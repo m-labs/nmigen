@@ -97,10 +97,22 @@ class FIFOInterface:
         return self.w_data
 
     # TODO(nmigen-0.2): move this to nmigen.compat and make it a deprecated extension
+    @din.setter
+    @deprecated("instead of `fifo.din = x`, use `fifo.w_data = x`")
+    def din(self, w_data):
+        self.w_data = w_data
+
+    # TODO(nmigen-0.2): move this to nmigen.compat and make it a deprecated extension
     @property
     @deprecated("instead of `fifo.writable`, use `fifo.w_rdy`")
     def writable(self):
         return self.w_rdy
+
+    # TODO(nmigen-0.2): move this to nmigen.compat and make it a deprecated extension
+    @writable.setter
+    @deprecated("instead of `fifo.writable = x`, use `fifo.w_rdy = x`")
+    def writable(self, w_rdy):
+        self.w_rdy = w_rdy
 
     # TODO(nmigen-0.2): move this to nmigen.compat and make it a deprecated extension
     @property
@@ -109,10 +121,22 @@ class FIFOInterface:
         return self.w_en
 
     # TODO(nmigen-0.2): move this to nmigen.compat and make it a deprecated extension
+    @we.setter
+    @deprecated("instead of `fifo.we = x`, use `fifo.w_en = x`")
+    def we(self, w_en):
+        self.w_en = w_en
+
+    # TODO(nmigen-0.2): move this to nmigen.compat and make it a deprecated extension
     @property
     @deprecated("instead of `fifo.dout`, use `fifo.r_data`")
     def dout(self):
         return self.r_data
+
+    # TODO(nmigen-0.2): move this to nmigen.compat and make it a deprecated extension
+    @dout.setter
+    @deprecated("instead of `fifo.dout = x`, use `fifo.r_data = x`")
+    def dout(self, r_data):
+        self.r_data = r_data
 
     # TODO(nmigen-0.2): move this to nmigen.compat and make it a deprecated extension
     @property
@@ -121,10 +145,22 @@ class FIFOInterface:
         return self.r_rdy
 
     # TODO(nmigen-0.2): move this to nmigen.compat and make it a deprecated extension
+    @readable.setter
+    @deprecated("instead of `fifo.readable = x`, use `fifo.r_rdy = x`")
+    def readable(self, r_rdy):
+        self.r_rdy = r_rdy
+
+    # TODO(nmigen-0.2): move this to nmigen.compat and make it a deprecated extension
     @property
     @deprecated("instead of `fifo.re`, use `fifo.r_en`")
     def re(self):
         return self.r_en
+
+    # TODO(nmigen-0.2): move this to nmigen.compat and make it a deprecated extension
+    @re.setter
+    @deprecated("instead of `fifo.re = x`, use `fifo.r_en = x`")
+    def re(self, r_en):
+        self.r_en = r_en
 
 
 def _incr(signal, modulo):
@@ -240,7 +276,7 @@ class SyncFIFOBuffered(Elaboratable, FIFOInterface):
     does not use asynchronous memory reads, which are incompatible with FPGA block RAMs.
 
     In exchange, the latency betw_enen an entry being written to an empty queue and that entry
-    becoming available on the output is increased to one cycle.
+    becoming available on the output is increased by one cycle compared to :class:`SyncFIFO`.
     """.strip(),
     parameters="""
     fwft : bool
@@ -358,25 +394,30 @@ class AsyncFIFO(Elaboratable, FIFOInterface):
         m.d.comb += consume_enc.i.eq(consume_r_nxt)
         m.d[self._r_domain] += consume_r_gry.eq(consume_enc.o)
 
+        w_full  = Signal()
+        r_empty = Signal()
         m.d.comb += [
-            self.w_rdy.eq(
-                (produce_w_gry[-1]  == consume_w_gry[-1]) |
-                (produce_w_gry[-2]  == consume_w_gry[-2]) |
-                (produce_w_gry[:-2] != consume_w_gry[:-2])),
-            self.r_rdy.eq(consume_r_gry != produce_r_gry)
+            w_full.eq((produce_w_gry[-1]  != consume_w_gry[-1]) &
+                      (produce_w_gry[-2]  != consume_w_gry[-2]) &
+                      (produce_w_gry[:-2] == consume_w_gry[:-2])),
+            r_empty.eq(consume_r_gry == produce_r_gry),
         ]
 
         storage = Memory(self.width, self.depth)
         w_port  = m.submodules.w_port = storage.write_port(domain=self._w_domain)
-        r_port  = m.submodules.r_port = storage.read_port (domain=self._r_domain)
+        r_port  = m.submodules.r_port = storage.read_port (domain=self._r_domain,
+                                                           transparent=False)
         m.d.comb += [
             w_port.addr.eq(produce_w_bin[:-1]),
             w_port.data.eq(self.w_data),
-            w_port.en.eq(do_write)
+            w_port.en.eq(do_write),
+            self.w_rdy.eq(~w_full),
         ]
         m.d.comb += [
-            r_port.addr.eq((consume_r_bin + do_read)[:-1]),
+            r_port.addr.eq(consume_r_nxt[:-1]),
             self.r_data.eq(r_port.data),
+            r_port.en.eq(1),
+            self.r_rdy.eq(~r_empty),
         ]
 
         if platform == "formal":
@@ -398,8 +439,8 @@ class AsyncFIFOBuffered(Elaboratable, FIFOInterface):
     This queue's interface is identical to :class:`AsyncFIFO`, but it has an additional register
     on the output, improving timing in case of block RAM that has large clock-to-output delay.
 
-    In exchange, the latency betw_enen an entry being written to an empty queue and that entry
-    becoming available on the output is increased to one cycle.
+    In exchange, the latency between an entry being written to an empty queue and that entry
+    becoming available on the output is increased by one cycle compared to :class:`AsyncFIFO`.
     """.strip(),
     parameters="""
     r_domain : str

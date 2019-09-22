@@ -60,6 +60,7 @@ class MemoryTestCase(FHDLTestCase):
         self.assertEqual(rdport.transparent, False)
         self.assertEqual(len(rdport.en), 1)
         self.assertIsInstance(rdport.en, Signal)
+        self.assertEqual(rdport.en.reset, 1)
 
     def test_read_port_asynchronous(self):
         mem    = Memory(width=8, depth=4)
@@ -123,8 +124,8 @@ class DummyPortTestCase(FHDLTestCase):
 
     def test_sizes(self):
         p1 = DummyPort(width=8, addr_bits=2)
-        self.assertEqual(p1.addr.nbits, 2)
-        self.assertEqual(p1.data.nbits, 8)
-        self.assertEqual(p1.en.nbits, 1)
+        self.assertEqual(p1.addr.width, 2)
+        self.assertEqual(p1.data.width, 8)
+        self.assertEqual(p1.en.width, 1)
         p2 = DummyPort(width=8, addr_bits=2, granularity=2)
-        self.assertEqual(p2.en.nbits, 4)
+        self.assertEqual(p2.en.width, 4)

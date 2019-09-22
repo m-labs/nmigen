@@ -88,15 +88,15 @@ class ReadPort(Elaboratable):
         self.data = Signal(memory.width,
                            name="{}_r_data".format(memory.name), src_loc_at=2)
         if self.domain != "comb" and not transparent:
-            self.en = Signal(name="{}_r_en".format(memory.name), src_loc_at=2)
+            self.en = Signal(name="{}_r_en".format(memory.name), src_loc_at=2, reset=1)
         else:
             self.en = Const(1)
 
     def elaborate(self, platform):
         f = Instance("$memrd",
             p_MEMID=self.memory,
-            p_ABITS=self.addr.nbits,
-            p_WIDTH=self.data.nbits,
+            p_ABITS=self.addr.width,
+            p_WIDTH=self.data.width,
             p_CLK_ENABLE=self.domain != "comb",
             p_CLK_POLARITY=1,
             p_TRANSPARENT=self.transparent,
@@ -158,8 +158,8 @@ class WritePort(Elaboratable):
     def elaborate(self, platform):
         f = Instance("$memwr",
             p_MEMID=self.memory,
-            p_ABITS=self.addr.nbits,
-            p_WIDTH=self.data.nbits,
+            p_ABITS=self.addr.width,
+            p_WIDTH=self.data.width,
             p_CLK_ENABLE=1,
             p_CLK_POLARITY=1,
             p_PRIORITY=self.priority,

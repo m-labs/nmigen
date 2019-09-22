@@ -137,7 +137,7 @@ class _RHSValueCompiler(_ValueCompiler):
                 return lambda state: normalize(arg(state) == mask, shape)
             if value.op == "r^":
                 # Believe it or not, this is the fastest way to compute a sideways XOR in Python.
-                return lambda state: normalize(str(arg(state)).count("1") % 2, shape)
+                return lambda state: normalize(format(arg(state), "b").count("1") % 2, shape)
         elif len(value.operands) == 2:
             lhs, rhs = map(self, value.operands)
             if value.op == "+":
@@ -561,7 +561,7 @@ class Simulator:
                     var_init = signal.decoder(signal.reset).expandtabs().replace(" ", "_")
                 else:
                     var_type = "wire"
-                    var_size = signal.nbits
+                    var_size = signal.width
                     var_init = signal.reset
 
                 suffix = None

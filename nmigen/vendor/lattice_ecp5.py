@@ -18,7 +18,7 @@ class LatticeECP5Platform(TemplatedPlatform):
         * ``ecppack``
 
     The environment is populated by running the script specified in the environment variable
-    ``NMIGEN_Trellis_env``, if present.
+    ``NMIGEN_ENV_Trellis``, if present.
 
     Available overrides:
         * ``verbose``: enables logging of informational messages to standard error.
@@ -29,6 +29,7 @@ class LatticeECP5Platform(TemplatedPlatform):
         * ``yosys_opts``: adds extra options for ``yosys``.
         * ``nextpnr_opts``: adds extra options for ``nextpnr-ecp5``.
         * ``ecppack_opts``: adds extra options for ``ecppack``.
+        * ``add_preferences``: inserts commands at the end of the LPF file.
 
     Build products:
         * ``{{name}}.rpt``: Yosys log.
@@ -46,13 +47,13 @@ class LatticeECP5Platform(TemplatedPlatform):
         * ``ddtcmd``
 
     The environment is populated by running the script specified in the environment variable
-    ``NMIGEN_Diamond_env``, if present.
+    ``NMIGEN_ENV_Diamond``, if present.
 
     Available overrides:
         * ``script_project``: inserts commands before ``prj_project save`` in Tcl script.
         * ``script_after_export``: inserts commands after ``prj_run Export`` in Tcl script.
-        * ``add_preferences``: inserts commands in LPF file.
-        * ``add_constraints``: inserts commands in XDC file.
+        * ``add_preferences``: inserts commands at the end of the LPF file.
+        * ``add_constraints``: inserts commands at the end of the XDC file.
 
     Build products:
         * ``{{name}}_impl/{{name}}_impl.htm``: consolidated log.
@@ -91,6 +92,11 @@ class LatticeECP5Platform(TemplatedPlatform):
         "BG756": "caBGA756",
     }
 
+    _trellis_required_tools = [
+        "yosys",
+        "nextpnr-ecp5",
+        "ecppack"
+    ]
     _trellis_file_templates = {
         **TemplatedPlatform.build_script_templates,
         "{{name}}.il": r"""
@@ -121,8 +127,9 @@ class LatticeECP5Platform(TemplatedPlatform):
                     {%- for key, value in extras.items() %} {{key}}={{value}}{% endfor %};
             {% endfor %}
             {% for signal, frequency in platform.iter_clock_constraints() -%}
-                FREQUENCY PORT "{{signal.name}}" {{frequency}} HZ;
+                FREQUENCY NET "{{signal|hierarchy(".")}}" {{frequency}} HZ;
             {% endfor %}
+            {{get_override("add_preferences")|default("# (add_preferences placeholder)")}}
         """
     }
     _trellis_command_templates = [
@@ -157,6 +164,10 @@ class LatticeECP5Platform(TemplatedPlatform):
 
     # Diamond templates
 
+    _diamond_required_tools = [
+        "pnmainc",
+        "ddtcmd"
+    ]
     _diamond_file_templates = {
         **TemplatedPlatform.build_script_templates,
         "build_{{name}}.sh": r"""
@@ -174,22 +185,22 @@ class LatticeECP5Platform(TemplatedPlatform):
             {{emit_design("verilog")}}
         """,
         "{{name}}.tcl": r"""
-            prj_project new -name "{{name}}" -impl "impl" -impl_dir "top_impl" \
+            prj_project new -name {{name}} -impl impl -impl_dir top_impl \
                 -dev {{platform.device}}-{{platform.speed}}{{platform.package}}{{platform.grade}} \
-                -lpf "{{name}}.lpf" \
+                -lpf {{name}}.lpf \
                 -synthesis synplify
             {% for file in platform.iter_extra_files(".v", ".sv", ".vhd", ".vhdl") -%}
                 prj_src add "{{file}}"
             {% endfor %}
-            prj_src add "{{name}}.v"
-            prj_impl option top "{{name}}"
-            prj_src add "{{name}}.sdc"
+            prj_src add {{name}}.v
+            prj_impl option top {{name}}
+            prj_src add {{name}}.sdc
             {{get_override("script_project")|default("# (script_project placeholder)")}}
             prj_project save
-            prj_run Synthesis -impl "impl" -forceAll
-            prj_run Translate -impl "impl" -forceAll
-            prj_run Map -impl "impl" -forceAll
-            prj_run PAR -impl "impl" -forceAll
+            prj_run Synthesis -impl impl -forceAll
+            prj_run Translate -impl impl -forceAll
+            prj_run Map -impl impl -forceAll
+            prj_run PAR -impl impl -forceAll
             prj_run Export -impl "impl" -forceAll -task Bitgen
             {{get_override("script_after_export")|default("# (script_after_export placeholder)")}}
         """,
@@ -203,7 +214,7 @@ class LatticeECP5Platform(TemplatedPlatform):
                     {%- for key, value in extras.items() %} {{key}}={{value}}{% endfor %};
             {% endfor %}
             {% for signal, frequency in platform.iter_clock_constraints() -%}
-                FREQUENCY PORT "{{signal.name}}" {{frequency/1000000}} MHZ;
+                FREQUENCY NET "{{signal|hierarchy("/")}}" {{frequency/1000000}} MHZ;
             {% endfor %}
             {{get_override("add_preferences")|default("# (add_preferences placeholder)")}}
         """,
@@ -243,9 +254,9 @@ class LatticeECP5Platform(TemplatedPlatform):
     @property
     def required_tools(self):
         if self.toolchain == "Trellis":
-            return ["yosys", "nextpnr-ecp5", "ecppack"]
+            return self._trellis_required_tools
         if self.toolchain == "Diamond":
-            return ["pnmainc", "ddtcmd"]
+            return self._diamond_required_tools
         assert False
 
     @property

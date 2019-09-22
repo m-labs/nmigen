@@ -4,7 +4,11 @@ from setuptools import setup, find_packages
 def scm_version():
     def local_scheme(version):
         return version.format_choice("+{node}", "+{node}.dirty")
-    return {"version_scheme": "guess-next-dev", "local_scheme": local_scheme}
+    return {
+        "relative_to": __file__,
+        "version_scheme": "guess-next-dev",
+        "local_scheme": local_scheme
+    }
 
 
 setup(
@@ -17,7 +21,7 @@ setup(
     license="BSD",
     python_requires="~=3.6",
     setup_requires=["setuptools_scm"],
-    install_requires=["pyvcd>=0.1.4", "bitarray", "Jinja2"],
+    install_requires=["setuptools", "pyvcd>=0.1.4", "bitarray", "Jinja2"],
     packages=find_packages(),
     project_urls={
         #"Documentation": "https://nmigen.readthedocs.io/",

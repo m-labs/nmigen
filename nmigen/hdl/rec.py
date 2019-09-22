@@ -5,6 +5,7 @@ from functools import reduce
 from .. import tracer
 from ..tools import union
 from .ast import *
+from .ast import _enum_shape
 
 
 __all__ = ["Direction", "DIR_NONE", "DIR_FANOUT", "DIR_FANIN", "Layout", "Record"]
@@ -45,9 +46,11 @@ class Layout:
             if not isinstance(name, str):
                 raise TypeError("Field {!r} has invalid name: should be a string"
                                 .format(field))
+            if isinstance(shape, type) and issubclass(shape, Enum):
+                shape = _enum_shape(shape)
             if not isinstance(shape, (int, tuple, Layout)):
-                raise TypeError("Field {!r} has invalid shape: should be an int, tuple, or list "
-                                "of fields of a nested record"
+                raise TypeError("Field {!r} has invalid shape: should be an int, tuple, Enum, or "
+                                "list of fields of a nested record"
                                 .format(field))
             if name in self.fields:
                 raise NameError("Field {!r} has a name that is already present in the layout"

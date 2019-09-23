@@ -383,7 +383,7 @@ class Xilinx7SeriesPlatform(TemplatedPlatform):
         m.d.comb += ff_sync.o.eq(flops[-1])
         return m
 
-    def get_reset_sync(self, resetsync):
+    def get_reset_sync(self, reset_sync):
         m = Module()
         m.domains += ClockDomain("reset_sync", async_reset=True, local=True)
         flops = [Signal(1, name="stage{}".format(index), reset=1,

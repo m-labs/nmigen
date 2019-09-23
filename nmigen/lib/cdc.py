@@ -7,6 +7,14 @@ __all__ = ["FFSynchronizer", "ResetSynchronizer"]
 __all__ += ["MultiReg"]
 
 
+def _check_stages(stages):
+    if not isinstance(stages, int) or stages < 1:
+        raise TypeError("Synchronization stage count must be a positive integer, not '{!r}'"
+                        .format(stages))
+    if stages < 2:
+        raise ValueError("Synchronization stage count may not safely be less than 2")
+
+
 class FFSynchronizer(Elaboratable):
     """Resynchronise a signal to a different clock domain.
 
@@ -15,9 +23,9 @@ class FFSynchronizer(Elaboratable):
 
     Parameters
     ----------
-    i : Signal, in
+    i : Signal(n), in
         Signal to be resynchronised.
-    o : Signal, out
+    o : Signal(n), out
         Signal connected to synchroniser output.
     o_domain : str
         Name of output clock domain.
@@ -33,8 +41,8 @@ class FFSynchronizer(Elaboratable):
 
     Platform override
     -----------------
-    Define the ``get_ff_sync`` platform method to override the implementation of :class:`FFSynchronizer`,
-    e.g. to instantiate library cells directly.
+    Define the ``get_ff_sync`` platform method to override the implementation of
+    :class:`FFSynchronizer`, e.g. to instantiate library cells directly.
 
     Note on Reset
     -------------
@@ -53,7 +61,9 @@ class FFSynchronizer(Elaboratable):
 
     :class:`FFSynchronizer` is reset by the ``o_domain`` reset only.
     """
-    def __init__(self, i, o, *, o_domain="sync", stages=2, reset=0, reset_less=True):
+    def __init__(self, i, o, *, o_domain="sync", reset=0, reset_less=True, stages=2):
+        _check_stages(stages)
+
         self.i = i
         self.o = o
 
@@ -81,7 +91,35 @@ MultiReg = deprecated("instead of `MultiReg`, use `FFSynchronizer`")(FFSynchroni
 
 
 class ResetSynchronizer(Elaboratable):
+    """Synchronize deassertion of a clock domain reset.
+
+    The reset of the clock domain driven by the :class:`ResetSynchronizer` is asserted
+    asynchronously and deasserted synchronously, eliminating metastability during deassertion.
+
+    The driven clock domain could use a reset that is asserted either synchronously or
+    asynchronously; a reset is always deasserted synchronously. A domain with an asynchronously
+    asserted reset is useful if the clock of the domain may be gated, yet the domain still
+    needs to be reset promptly; otherwise, synchronously asserted reset (the default) should
+    be used.
+
+    Parameters
+    ----------
+    arst : Signal(1), out
+        Asynchronous reset signal, to be synchronized.
+    domain : str
+        Name of clock domain to reset.
+    stages : int, >=2
+        Number of synchronization stages between input and output. The lowest safe number is 2,
+        with higher numbers reducing MTBF further, at the cost of increased deassertion latency.
+
+    Platform override
+    -----------------
+    Define the ``get_reset_sync`` platform method to override the implementation of
+    :class:`ResetSynchronizer`, e.g. to instantiate library cells directly.
+    """
     def __init__(self, arst, *, domain="sync", stages=2):
+        _check_stages(stages)
+
         self.arst = arst
 
         self._domain = domain

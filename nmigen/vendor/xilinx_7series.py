@@ -24,7 +24,6 @@ class Xilinx7SeriesPlatform(TemplatedPlatform):
         * ``script_after_bitstream``: inserts commands after ``write_bitstream`` in Tcl script.
         * ``add_constraints``: inserts commands in XDC file.
         * ``vivado_opts``: adds extra options for ``vivado``.
-        * ``max_delay``: sets the maximum delay in nanoseconds for clock domain crossing constraints.
 
     Build products:
         * ``{{name}}.log``: Vivado log.
@@ -79,9 +78,15 @@ class Xilinx7SeriesPlatform(TemplatedPlatform):
             {% endfor %}
             {{get_override("script_after_read")|default("# (script_after_read placeholder)")}}
             synth_design -top {{name}} -part {{platform.device}}{{platform.package}}-{{platform.speed}}
-            set_false_path -hold -to [get_cells -hier -filter {nmigen.vivado.false_path == TRUE}]
             foreach cell [get_cells -hier -filter {nmigen.vivado.max_delay != ""}] {
-                set_max_delay [get_property nmigen.vivado.max_delay $cell] -to $cell
+                set clock [get_clocks -quiet -of_objects \
+                    [all_fanin -flat -startpoints_only [get_pin $cell/D]]]
+                if {[llength $clock] != 0} {
+                    set_max_delay -datapath_only -from $clock \
+                        -to [get_cells $cell] [get_property nmigen.vivado.max_delay $cell]
+                } else {
+                    set_max_delay -to [get_cells $cell] [get_property nmigen.vivado.max_delay $cell]
+                }
             }
             {{get_override("script_after_synth")|default("# (script_after_synth placeholder)")}}
             report_timing_summary -file {{name}}_timing_synth.rpt
@@ -372,7 +377,6 @@ class Xilinx7SeriesPlatform(TemplatedPlatform):
                         reset=ff_sync._reset, reset_less=ff_sync._reset_less,
                         attrs={"ASYNC_REG": "TRUE"})
                  for index in range(ff_sync._stages)]
-        flops[0].attrs["nmigen.vivado.false_path"] = "TRUE"
         flops[0].attrs["nmigen.vivado.max_delay"]  = "5.0" # FIXME
         for i, o in zip((ff_sync.i, *flops), flops):
             m.d[ff_sync._o_domain] += o.eq(i)
@@ -385,7 +389,6 @@ class Xilinx7SeriesPlatform(TemplatedPlatform):
         flops = [Signal(1, name="stage{}".format(index), reset=1,
                         attrs={"ASYNC_REG": "TRUE"})
                  for index in range(reset_sync._stages)]
-        flops[0].attrs["nmigen.vivado.false_path"] = "TRUE"
         flops[0].attrs["nmigen.vivado.max_delay"]  = "5.0" # FIXME
         for i, o in zip((0, *flops), flops):
             m.d.reset_sync += o.eq(i)

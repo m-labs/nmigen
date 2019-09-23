@@ -116,8 +116,8 @@ class Xilinx7SeriesPlatform(TemplatedPlatform):
             {% for signal, frequency in platform.iter_clock_constraints() -%}
                 create_clock -name {{signal.name}} -period {{1000000000/frequency}} [get_nets {{signal|hierarchy("/")}}]
             {% endfor %}
-            set_min_delay -1000.0 -to [get_cells -hier -filter {nmigen_async_ff == TRUE}]
-            set_max_delay {{get_override("max_delay")|default("5.0")}} -to [get_cells -hier -filter {nmigen_async_ff == TRUE}]
+            set_min_delay -1000.0 -to [get_cells -hier -filter {nmigen.async_ff == TRUE}]
+            set_max_delay {{get_override("max_delay")|default("5.0")}} -to [get_cells -hier -filter {nmigen.async_ff == TRUE}]
             {{get_override("add_constraints")|default("# (add_constraints placeholder)")}}
         """
     }
@@ -366,9 +366,9 @@ class Xilinx7SeriesPlatform(TemplatedPlatform):
 
     def get_ff_sync(self, ff_sync):
         m = Module()
-        # the `nmigen_async_ff` attribute is used in the constraints file to find the
+        # the `nmigen.async_ff` attribute is used in the constraints file to find the
         # first register in each MultiReg and add false path and max delay constraints
-        ff_sync._stages[0].attrs["nmigen_async_ff"]="TRUE"
+        ff_sync._stages[0].attrs["nmigen.async_ff"]="TRUE"
         for i, o in zip((ff_sync.i, *ff_sync._stages), ff_sync._stages):
             # Vivado uses the `ASYNC_REG` attribute to prevent SRL inferrence,
             # in clock domain crossing reporting and for placement
@@ -380,7 +380,7 @@ class Xilinx7SeriesPlatform(TemplatedPlatform):
     def get_reset_sync(self, resetsync):
         m = Module()
         m.domains += ClockDomain("reset_sync", async_reset=True, local=True)
-        resetsync._stages[0].attrs["nmigen_async_ff"]="TRUE"
+        resetsync._stages[0].attrs["nmigen.async_ff"]="TRUE"
         for i, o in zip((0, *resetsync._stages), resetsync._stages):
             o.attrs["ASYNC_REG"] = "TRUE"
             m.d.reset_sync += o.eq(i)

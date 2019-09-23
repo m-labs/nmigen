@@ -78,7 +78,7 @@ class FFSynchronizer(Elaboratable):
         if hasattr(platform, "get_ff_sync"):
             return platform.get_ff_sync(self)
 
-        assert _max_input_delay is None
+        assert self._max_input_delay is None
 
         m = Module()
         flops = [Signal(self.i.shape(), name="stage{}".format(index),
@@ -134,7 +134,7 @@ class ResetSynchronizer(Elaboratable):
         if hasattr(platform, "get_reset_sync"):
             return platform.get_reset_sync(self)
 
-        assert _max_input_delay is None
+        assert self._max_input_delay is None
 
         m = Module()
         m.domains += ClockDomain("reset_sync", async_reset=True, local=True)

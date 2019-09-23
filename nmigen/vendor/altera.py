@@ -135,7 +135,27 @@ class AlteraPlatform(TemplatedPlatform):
                             valid_xdrs=(0,), valid_attrs=True)
 
         m = Module()
-        m.d.comb += pin.i.eq(self._invert_if(invert, port))
+
+        ff_i = Signal(pin.width)
+
+        for bit in range(pin.width):
+            m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("alt_inbuf",
+                i_i=port[bit],
+                o_o=ff_i[bit]
+            )
+            
+            if pin.xdr == 0:
+                m.d.comb += pin.i[bit].eq(self._invert_if(invert, ff_i[bit]))
+            elif pin.xdr == 1:
+                m.submodules["{}_dff_i_{}".format(pin.name, bit)] += Instance("dff",
+                    a_useioff=True,
+                    i_d=self._invert_if(invert, ff_i[bit]),
+                    i_clk=pin.i_clk,
+                    i_clrn=1,
+                    i_prn=1,
+                    o_q=pin.i[bit]
+                )
+
         return m
 
     def get_output(self, pin, port, attrs, invert):
@@ -143,7 +163,27 @@ class AlteraPlatform(TemplatedPlatform):
                             valid_xdrs=(0,), valid_attrs=True)
 
         m = Module()
-        m.d.comb += port.eq(self._invert_if(invert, pin.o))
+
+        ff_o = Signal(pin.width)
+
+        for bit in range(pin.width):
+            if pin.xdr == 0:
+                m.d.comb += ff_o[bit].eq(self._invert_if(invert, pin.o[bit]))
+            elif pin.xdr == 1:
+                m.submodules["{}_dff_o_{}".format(pin.name, bit)] += Instance("dff",
+                    a_useioff=True,
+                    i_d=self._invert_if(invert, pin.o[bit]),
+                    i_clk=pin.i_clk,
+                    i_clrn=1,
+                    i_prn=1,
+                    o_q=ff_o[bit]
+                )
+
+            m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("alt_outbuf",
+                i_i=ff_o[bit],
+                o_o=port[bit]
+            )
+            
         return m
 
     def get_tristate(self, pin, port, attrs, invert):
@@ -151,12 +191,38 @@ class AlteraPlatform(TemplatedPlatform):
                             valid_xdrs=(0,), valid_attrs=True)
 
         m = Module()
-        m.submodules += Instance("$tribuf",
-            p_WIDTH=pin.width,
-            i_EN=pin.oe,
-            i_A=self._invert_if(invert, pin.o),
-            o_Y=port,
-        )
+
+        ff_o = Signal(pin.width)
+        ff_oe = Signal(pin.width)
+
+        for bit in range(pin.width):
+            if pin.xdr == 0:
+                m.d.comb += ff_o[bit].eq(self._invert_if(invert, pin.o[bit]))
+                m.d.comb += ff_oe[bit].eq(pin.oe[bit])
+            elif pin.xdr == 1:
+                m.submodules["{}_dff_o__{}".format(pin.name, bit)] += Instance("dff",
+                    a_useioff=True,
+                    i_d=self._invert_if(invert, pin.o[bit]),
+                    i_clk=pin.i_clk,
+                    i_clrn=1,
+                    i_prn=1,
+                    o_q=ff_o[bit]
+                )
+                m.submodules["{}_dff_oe_{}".format(pin.name, bit)] += Instance("dff",
+                    a_useioff=True,
+                    i_d=pin.oe[bit],
+                    i_clk=pin.i_clk,
+                    i_clrn=1,
+                    i_prn=1,
+                    o_q=ff_oe[bit]
+                )
+
+            m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("alt_outbuf_tri",
+                i_i=ff_o[bit],
+                i_oe=ff_oe[bit],
+                o_o=port[bit]
+            )
+
         return m
 
     def get_input_output(self, pin, port, attrs, invert):
@@ -164,13 +230,49 @@ class AlteraPlatform(TemplatedPlatform):
                             valid_xdrs=(0,), valid_attrs=True)
 
         m = Module()
-        m.submodules += Instance("$tribuf",
-            p_WIDTH=pin.width,
-            i_EN=pin.oe,
-            i_A=self._invert_if(invert, pin.o),
-            o_Y=port,
-        )
-        m.d.comb += pin.i.eq(self._invert_if(invert, port))
+
+        ff_i = Signal(pin.width)
+        ff_o = Signal(pin.width)
+        ff_oe = Signal(pin.width)
+
+        for bit in range(pin.width):
+            if pin.xdr == 0:
+                m.d.comb += pin.i[bit].eq(self._invert_if(invert, ff_i[bit]))
+                m.d.comb += ff_o[bit].eq(self._invert_if(invert, pin.o[bit]))
+                m.d.comb += ff_oe[bit].eq(pin.oe[bit])
+            elif pin.xdr == 1:
+                m.submodules["{}_dff_i_{}".format(pin.name, bit)] += Instance("dff",
+                    a_useioff=True,
+                    i_d=self._invert_if(invert, ff_i[bit]),
+                    i_clk=pin.i_clk,
+                    i_clrn=1,
+                    i_prn=1,
+                    o_q=pin.i[bit]
+                )
+                m.submodules["{}_dff_o__{}".format(pin.name, bit)] += Instance("dff",
+                    a_useioff=True,
+                    i_d=self._invert_if(invert, pin.o[bit]),
+                    i_clk=pin.i_clk,
+                    i_clrn=1,
+                    i_prn=1,
+                    o_q=ff_o[bit]
+                )
+                m.submodules["{}_dff_oe_{}".format(pin.name, bit)] += Instance("dff",
+                    a_useioff=True,
+                    i_d=pin.oe[bit],
+                    i_clk=pin.i_clk,
+                    i_clrn=1,
+                    i_prn=1,
+                    o_q=ff_oe[bit]
+                )
+
+            m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("alt_iobuf",
+                i_i=ff_o[bit],
+                i_oe=ff_oe[bit],
+                o_o=ff_i[bit],
+                io_io=port[bit]
+            )
+
         return m
 
     # TODO: support differential IO

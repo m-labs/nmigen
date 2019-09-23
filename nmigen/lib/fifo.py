@@ -4,7 +4,7 @@ from .. import *
 from ..asserts import *
 from ..tools import log2_int, deprecated
 from .coding import GrayEncoder
-from .cdc import MultiReg
+from .cdc import FFSynchronizer
 
 
 __all__ = ["FIFOInterface", "SyncFIFO", "SyncFIFOBuffered", "AsyncFIFO", "AsyncFIFOBuffered"]
@@ -19,7 +19,7 @@ class FIFOInterface:
     width : int
         Bit width of data entries.
     depth : int
-        Depth of the queue.
+        Depth of the queue. If zero, the FIFO cannot be read from or written to.
     {parameters}
 
     Attributes
@@ -60,35 +60,24 @@ class FIFOInterface:
     w_attributes="",
     r_attributes="")
 
-    def __init__(self, width, depth, *, fwft):
+    def __init__(self, *, width, depth, fwft):
+        if not isinstance(width, int) or width < 0:
+            raise TypeError("FIFO width must be a non-negative integer, not '{!r}'"
+                            .format(width))
+        if not isinstance(depth, int) or depth < 0:
+            raise TypeError("FIFO depth must be a non-negative integer, not '{!r}'"
+                            .format(depth))
         self.width = width
         self.depth = depth
         self.fwft  = fwft
 
         self.w_data = Signal(width, reset_less=True)
-        self.w_rdy  = Signal() # not full
+        self.w_rdy  = Signal() # writable; not full
         self.w_en   = Signal()
 
         self.r_data = Signal(width, reset_less=True)
-        self.r_rdy  = Signal() # not empty
+        self.r_rdy  = Signal() # readable; not empty
         self.r_en   = Signal()
-
-    def read(self):
-        """Read method for simulation."""
-        assert (yield self.r_rdy)
-        yield self.r_en.eq(1)
-        yield
-        value = (yield self.r_data)
-        yield self.r_en.eq(0)
-        return value
-
-    def write(self, data):
-        """Write method for simulation."""
-        assert (yield self.w_rdy)
-        yield self.w_data.eq(data)
-        yield self.w_en.eq(1)
-        yield
-        yield self.w_en.eq(0)
 
     # TODO(nmigen-0.2): move this to nmigen.compat and make it a deprecated extension
     @property
@@ -195,13 +184,20 @@ class SyncFIFO(Elaboratable, FIFOInterface):
     """.strip(),
     w_attributes="")
 
-    def __init__(self, width, depth, *, fwft=True):
-        super().__init__(width, depth, fwft=fwft)
+    def __init__(self, *, width, depth, fwft=True):
+        super().__init__(width=width, depth=depth, fwft=fwft)
 
         self.level = Signal.range(depth + 1)
 
     def elaborate(self, platform):
         m = Module()
+        if self.depth == 0:
+            m.d.comb += [
+                self.w_rdy.eq(0),
+                self.r_rdy.eq(0),
+            ]
+            return m
+
         m.d.comb += [
             self.w_rdy.eq(self.level != self.depth),
             self.r_rdy.eq(self.level != 0)
@@ -210,7 +206,7 @@ class SyncFIFO(Elaboratable, FIFOInterface):
         do_read  = self.r_rdy & self.r_en
         do_write = self.w_rdy & self.w_en
 
-        storage = Memory(self.width, self.depth)
+        storage = Memory(width=self.width, depth=self.depth)
         w_port  = m.submodules.w_port = storage.write_port()
         r_port  = m.submodules.r_port = storage.read_port(
             domain="comb" if self.fwft else "sync", transparent=self.fwft)
@@ -275,7 +271,7 @@ class SyncFIFOBuffered(Elaboratable, FIFOInterface):
     This queue's interface is identical to :class:`SyncFIFO` configured as ``fwft=True``, but it
     does not use asynchronous memory reads, which are incompatible with FPGA block RAMs.
 
-    In exchange, the latency betw_enen an entry being written to an empty queue and that entry
+    In exchange, the latency between an entry being written to an empty queue and that entry
     becoming available on the output is increased by one cycle compared to :class:`SyncFIFO`.
     """.strip(),
     parameters="""
@@ -290,17 +286,24 @@ class SyncFIFOBuffered(Elaboratable, FIFOInterface):
     """.strip(),
     w_attributes="")
 
-    def __init__(self, width, depth):
-        super().__init__(width, depth, fwft=True)
+    def __init__(self, *, width, depth):
+        super().__init__(width=width, depth=depth, fwft=True)
 
         self.level = Signal.range(depth + 1)
 
     def elaborate(self, platform):
         m = Module()
+        if self.depth == 0:
+            m.d.comb += [
+                self.w_rdy.eq(0),
+                self.r_rdy.eq(0),
+            ]
+            return m
 
         # Effectively, this queue treats the output register of the non-FWFT inner queue as
         # an additional storage element.
-        m.submodules.unbuffered = fifo = SyncFIFO(self.width, self.depth - 1, fwft=False)
+        m.submodules.unbuffered = fifo = SyncFIFO(width=self.width, depth=self.depth - 1,
+                                                  fwft=False)
 
         m.d.comb += [
             fifo.w_data.eq(self.w_data),
@@ -329,6 +332,9 @@ class AsyncFIFO(Elaboratable, FIFOInterface):
 
     Read and write interfaces are accessed from different clock domains, which can be set when
     constructing the FIFO.
+
+    :class:`AsyncFIFO` only supports power of 2 depths. Unless ``exact_depth`` is specified,
+    the ``depth`` parameter is rounded up to the next power of 2.
     """.strip(),
     parameters="""
     r_domain : str
@@ -344,23 +350,35 @@ class AsyncFIFO(Elaboratable, FIFOInterface):
     r_attributes="",
     w_attributes="")
 
-    def __init__(self, width, depth, *, r_domain="read", w_domain="write"):
-        super().__init__(width, depth, fwft=True)
+    def __init__(self, *, width, depth, r_domain="read", w_domain="write", exact_depth=False):
+        if depth != 0:
+            try:
+                depth_bits = log2_int(depth, need_pow2=exact_depth)
+                depth = 1 << depth_bits
+            except ValueError as e:
+                raise ValueError("AsyncFIFO only supports depths that are powers of 2; requested "
+                                 "exact depth {} is not"
+                                 .format(depth)) from None
+        else:
+            depth_bits = 0
+        super().__init__(width=width, depth=depth, fwft=True)
 
         self._r_domain = r_domain
         self._w_domain = w_domain
-
-        try:
-            self._ctr_bits = log2_int(depth, need_pow2=True) + 1
-        except ValueError as e:
-            raise ValueError("AsyncFIFO only supports power-of-2 depths") from e
+        self._ctr_bits = depth_bits + 1
 
     def elaborate(self, platform):
+        m = Module()
+        if self.depth == 0:
+            m.d.comb += [
+                self.w_rdy.eq(0),
+                self.r_rdy.eq(0),
+            ]
+            return m
+
         # The design of this queue is the "style #2" from Clifford E. Cummings' paper "Simulation
         # and Synthesis Techniques for Asynchronous FIFO Design":
         # http://www.sunburst-design.com/papers/CummingsSNUG2002SJ_FIFO1.pdf
-
-        m = Module()
 
         do_write = self.w_rdy & self.w_en
         do_read  = self.r_rdy & self.r_en
@@ -381,7 +399,7 @@ class AsyncFIFO(Elaboratable, FIFOInterface):
         produce_enc = m.submodules.produce_enc = \
             GrayEncoder(self._ctr_bits)
         produce_cdc = m.submodules.produce_cdc = \
-            MultiReg(produce_w_gry, produce_r_gry, o_domain=self._r_domain)
+            FFSynchronizer(produce_w_gry, produce_r_gry, o_domain=self._r_domain)
         m.d.comb += produce_enc.i.eq(produce_w_nxt),
         m.d[self._w_domain] += produce_w_gry.eq(produce_enc.o)
 
@@ -390,7 +408,7 @@ class AsyncFIFO(Elaboratable, FIFOInterface):
         consume_enc = m.submodules.consume_enc = \
             GrayEncoder(self._ctr_bits)
         consume_cdc = m.submodules.consume_cdc = \
-            MultiReg(consume_r_gry, consume_w_gry, o_domain=self._w_domain)
+            FFSynchronizer(consume_r_gry, consume_w_gry, o_domain=self._w_domain)
         m.d.comb += consume_enc.i.eq(consume_r_nxt)
         m.d[self._r_domain] += consume_r_gry.eq(consume_enc.o)
 
@@ -403,7 +421,7 @@ class AsyncFIFO(Elaboratable, FIFOInterface):
             r_empty.eq(consume_r_gry == produce_r_gry),
         ]
 
-        storage = Memory(self.width, self.depth)
+        storage = Memory(width=self.width, depth=self.depth)
         w_port  = m.submodules.w_port = storage.write_port(domain=self._w_domain)
         r_port  = m.submodules.r_port = storage.read_port (domain=self._r_domain,
                                                            transparent=False)
@@ -436,6 +454,10 @@ class AsyncFIFOBuffered(Elaboratable, FIFOInterface):
     Read and write interfaces are accessed from different clock domains, which can be set when
     constructing the FIFO.
 
+    :class:`AsyncFIFOBuffered` only supports power of 2 plus one depths. Unless ``exact_depth``
+    is specified, the ``depth`` parameter is rounded up to the next power of 2 plus one.
+    (The output buffer acts as an additional queue element.)
+
     This queue's interface is identical to :class:`AsyncFIFO`, but it has an additional register
     on the output, improving timing in case of block RAM that has large clock-to-output delay.
 
@@ -456,15 +478,30 @@ class AsyncFIFOBuffered(Elaboratable, FIFOInterface):
     r_attributes="",
     w_attributes="")
 
-    def __init__(self, width, depth, *, r_domain="read", w_domain="write"):
-        super().__init__(width, depth, fwft=True)
+    def __init__(self, *, width, depth, r_domain="read", w_domain="write", exact_depth=False):
+        if depth != 0:
+            try:
+                depth_bits = log2_int(max(0, depth - 1), need_pow2=exact_depth)
+                depth = (1 << depth_bits) + 1
+            except ValueError as e:
+                raise ValueError("AsyncFIFOBuffered only supports depths that are one higher "
+                                 "than powers of 2; requested exact depth {} is not"
+                                 .format(depth)) from None
+        super().__init__(width=width, depth=depth, fwft=True)
 
         self._r_domain = r_domain
         self._w_domain = w_domain
 
     def elaborate(self, platform):
         m = Module()
-        m.submodules.unbuffered = fifo = AsyncFIFO(self.width, self.depth - 1,
+        if self.depth == 0:
+            m.d.comb += [
+                self.w_rdy.eq(0),
+                self.r_rdy.eq(0),
+            ]
+            return m
+
+        m.submodules.unbuffered = fifo = AsyncFIFO(width=self.width, depth=self.depth - 1,
             r_domain=self._r_domain, w_domain=self._w_domain)
 
         m.d.comb += [

@@ -523,6 +523,8 @@ def Mux(sel, val1, val0):
     Value, out
         Output ``Value``. If ``sel`` is asserted, the Mux returns ``val1``, else ``val0``.
     """
+    if len(sel) != 1:
+        sel = Value.wrap(sel).bool()
     return Operator("m", [sel, val1, val0])
 
 
@@ -729,7 +731,7 @@ class Signal(Value, DUID):
     attrs : dict
     """
 
-    def __init__(self, shape=None, name=None, *, reset=0, reset_less=False, min=None, max=None,
+    def __init__(self, shape=None, *, name=None, reset=0, reset_less=False, min=None, max=None,
                  attrs=None, decoder=None, src_loc_at=0):
         super().__init__(src_loc_at=src_loc_at)
 

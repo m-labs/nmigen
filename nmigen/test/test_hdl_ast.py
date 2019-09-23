@@ -276,6 +276,11 @@ class OperatorTestCase(FHDLTestCase):
         v4 = Mux(s, Const(0, (4, False)), Const(0, (4, True)))
         self.assertEqual(v4.shape(), (5, True))
 
+    def test_mux_wide(self):
+        s = Const(0b100)
+        v = Mux(s, Const(0, (4, False)), Const(0, (6, False)))
+        self.assertEqual(repr(v), "(m (b (const 3'd4)) (const 4'd0) (const 6'd0))")
+
     def test_bool(self):
         v = Const(0).bool()
         self.assertEqual(repr(v), "(b (const 1'd0))")
@@ -581,12 +586,6 @@ class SignalTestCase(FHDLTestCase):
         self.assertEqual(s1.name, "s1")
         s2 = Signal(name="sig")
         self.assertEqual(s2.name, "sig")
-
-    def test_name_bad(self):
-        with self.assertRaises(TypeError,
-                msg="Name must be a string, not 'True'"):
-            # A common typo: forgetting to put parens around width and signedness
-            Signal(1, True)
 
     def test_reset(self):
         s1 = Signal(4, reset=0b111, reset_less=True)

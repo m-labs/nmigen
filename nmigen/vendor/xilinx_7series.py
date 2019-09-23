@@ -364,17 +364,17 @@ class Xilinx7SeriesPlatform(TemplatedPlatform):
             )
         return m
 
-    def get_multi_reg(self, multireg):
+    def get_ff_sync(self, ff_sync):
         m = Module()
         # the `nmigen_async_ff` attribute is used in the constraints file to find the
         # first register in each MultiReg and add false path and max delay constraints
-        multireg._regs[0].attrs["nmigen_async_ff"]="TRUE"
-        for i, o in zip((multireg.i, *multireg._regs), multireg._regs):
+        ff_sync._regs[0].attrs["nmigen_async_ff"]="TRUE"
+        for i, o in zip((ff_sync.i, *ff_sync._stages), ff_sync._stages):
             # Vivado uses the `ASYNC_REG` attribute to prevent SRL inferrence,
             # in clock domain crossing reporting and for placement
             o.attrs["ASYNC_REG"] = "TRUE"
-            m.d[multireg._o_domain] += o.eq(i)
-        m.d.comb += multireg.o.eq(multireg._regs[-1])
+            m.d[ff_sync._o_domain] += o.eq(i)
+        m.d.comb += ff_sync.o.eq(ff_sync._stages[-1])
         return m
 
     def get_reset_sync(self, resetsync):

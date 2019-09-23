@@ -61,7 +61,8 @@ class FFSynchronizer(Elaboratable):
 
     :class:`FFSynchronizer` is reset by the ``o_domain`` reset only.
     """
-    def __init__(self, i, o, *, o_domain="sync", reset=0, reset_less=True, stages=2):
+    def __init__(self, i, o, *, o_domain="sync", reset=0, reset_less=True, stages=2,
+                 max_input_delay=None):
         _check_stages(stages)
 
         self.i = i
@@ -71,10 +72,13 @@ class FFSynchronizer(Elaboratable):
         self._reset_less = reset_less
         self._o_domain   = o_domain
         self._stages     = stages
+        self._max_input_delay = max_input_delay
 
     def elaborate(self, platform):
         if hasattr(platform, "get_ff_sync"):
             return platform.get_ff_sync(self)
+
+        assert _max_input_delay is None
 
         m = Module()
         flops = [Signal(self.i.shape(), name="stage{}".format(index),
@@ -117,17 +121,20 @@ class ResetSynchronizer(Elaboratable):
     Define the ``get_reset_sync`` platform method to override the implementation of
     :class:`ResetSynchronizer`, e.g. to instantiate library cells directly.
     """
-    def __init__(self, arst, *, domain="sync", stages=2):
+    def __init__(self, arst, *, domain="sync", stages=2, max_input_delay=None):
         _check_stages(stages)
 
         self.arst = arst
 
         self._domain = domain
         self._stages = stages
+        self._max_input_delay = max_input_delay
 
     def elaborate(self, platform):
         if hasattr(platform, "get_reset_sync"):
             return platform.get_reset_sync(self)
+
+        assert _max_input_delay is None
 
         m = Module()
         m.domains += ClockDomain("reset_sync", async_reset=True, local=True)

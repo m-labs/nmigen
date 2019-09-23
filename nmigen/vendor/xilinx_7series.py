@@ -78,14 +78,15 @@ class Xilinx7SeriesPlatform(TemplatedPlatform):
             {% endfor %}
             {{get_override("script_after_read")|default("# (script_after_read placeholder)")}}
             synth_design -top {{name}} -part {{platform.device}}{{platform.package}}-{{platform.speed}}
-            foreach cell [get_cells -hier -filter {nmigen.vivado.max_delay != ""}] {
-                set clock [get_clocks -quiet -of_objects \
+            foreach cell [get_cells -quiet -hier -filter {nmigen.vivado.false_path == "TRUE"}] {
+                set_false_path -to $cell
+            }
+            foreach cell [get_cells -quiet -hier -filter {nmigen.vivado.max_delay != ""}] {
+                set clock [get_clocks -of_objects \
                     [all_fanin -flat -startpoints_only [get_pin $cell/D]]]
                 if {[llength $clock] != 0} {
                     set_max_delay -datapath_only -from $clock \
                         -to [get_cells $cell] [get_property nmigen.vivado.max_delay $cell]
-                } else {
-                    set_max_delay -to [get_cells $cell] [get_property nmigen.vivado.max_delay $cell]
                 }
             }
             {{get_override("script_after_synth")|default("# (script_after_synth placeholder)")}}
@@ -377,7 +378,10 @@ class Xilinx7SeriesPlatform(TemplatedPlatform):
                         reset=ff_sync._reset, reset_less=ff_sync._reset_less,
                         attrs={"ASYNC_REG": "TRUE"})
                  for index in range(ff_sync._stages)]
-        flops[0].attrs["nmigen.vivado.max_delay"]  = "5.0" # FIXME
+        if ff_sync._max_input_delay is None:
+            flops[0].attrs["nmigen.vivado.false_path"] = "TRUE"
+        else:
+            flops[0].attrs["nmigen.vivado.max_delay"] = ff_sync._max_input_delay
         for i, o in zip((ff_sync.i, *flops), flops):
             m.d[ff_sync._o_domain] += o.eq(i)
         m.d.comb += ff_sync.o.eq(flops[-1])
@@ -389,7 +393,10 @@ class Xilinx7SeriesPlatform(TemplatedPlatform):
         flops = [Signal(1, name="stage{}".format(index), reset=1,
                         attrs={"ASYNC_REG": "TRUE"})
                  for index in range(reset_sync._stages)]
-        flops[0].attrs["nmigen.vivado.max_delay"]  = "5.0" # FIXME
+        if reset_sync._max_input_delay is None:
+            flops[0].attrs["nmigen.vivado.false_path"] = "TRUE"
+        else:
+            flops[0].attrs["nmigen.vivado.max_delay"] = reset_sync._max_input_delay
         for i, o in zip((0, *flops), flops):
             m.d.reset_sync += o.eq(i)
         m.d.comb += [

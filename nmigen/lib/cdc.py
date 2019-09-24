@@ -39,8 +39,8 @@ class FFSynchronizer(Elaboratable):
         Number of synchronization stages between input and output. The lowest safe number is 2,
         with higher numbers reducing MTBF further, at the cost of increased latency.
     max_input_delay : None or float
-        Maximum delay from the input signal's clock to the first synchronizer flip flop. Not
-        supported on all platforms and must be set to None on unsupported platforms.
+        Maximum delay from the input signal's clock to the first synchronization stage.
+        If specified and the platform does not support it, elaboration will fail.
 
     Platform override
     -----------------
@@ -122,8 +122,8 @@ class ResetSynchronizer(Elaboratable):
         Number of synchronization stages between input and output. The lowest safe number is 2,
         with higher numbers reducing MTBF further, at the cost of increased deassertion latency.
     max_input_delay : None or float
-        Maximum delay from the input signal's clock to the first synchronizer flip flop. Not
-        supported on all platforms and must be set to None on unsupported platforms.
+        Maximum delay from the input signal's clock to the first synchronization stage.
+        If specified and the platform does not support it, elaboration will fail.
 
     Platform override
     -----------------

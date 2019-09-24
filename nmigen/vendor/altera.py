@@ -283,4 +283,155 @@ class AlteraPlatform(TemplatedPlatform):
 
         return m
 
-    # TODO: support differential IO
+    def get_diff_input(self, pin, p_port, n_port, attrs, invert):
+        self._check_feature("differential input", pin, attrs,
+                            valid_xdrs=(0,), valid_attrs=True)
+        m = Module()
+
+        ff_i = Signal(pin.width)
+
+        if pin.xdr == 1:
+            pin.i.attrs["useioff"] = "1"
+
+        for bit in range(pin.width):
+            m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("alt_inbuf_diff",
+                i_i=p_port[bit],
+                i_ibar=n_port[bit],
+                o_o=ff_i[bit]
+            )
+            
+            if pin.xdr == 0:
+                m.d.comb += pin.i[bit].eq(self._invert_if(invert, ff_i[bit]))
+            elif pin.xdr == 1:
+                m.submodules["{}_dff_i_{}".format(pin.name, bit)] += Instance("dff",
+                    i_d=self._invert_if(invert, ff_i[bit]),
+                    i_clk=pin.i_clk,
+                    i_clrn=1,
+                    i_prn=1,
+                    o_q=pin.i[bit]
+                )
+ 
+        return m
+
+    def get_diff_output(self, pin, p_port, n_port, attrs, invert):
+        self._check_feature("differential output", pin, attrs,
+                            valid_xdrs=(0,), valid_attrs=True)
+        m = Module()
+
+        ff_o = Signal(pin.width)
+
+        if pin.xdr == 1:
+            pin.o.attrs["useioff"] = "1"
+
+        for bit in range(pin.width):
+            if pin.xdr == 0:
+                m.d.comb += ff_o[bit].eq(self._invert_if(invert, pin.o[bit]))
+            elif pin.xdr == 1:
+                m.submodules["{}_dff_o_{}".format(pin.name, bit)] += Instance("dff",
+                    i_d=self._invert_if(invert, pin.o[bit]),
+                    i_clk=pin.i_clk,
+                    i_clrn=1,
+                    i_prn=1,
+                    o_q=ff_o[bit]
+                )
+
+            m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("alt_outbuf_diff",
+                i_i=ff_o[bit],
+                o_o=p_port[bit],
+                o_obar=n_port[bit]
+            )
+
+        return m
+
+    def get_diff_tristate(self, pin, p_port, n_port, attrs, invert):
+        self._check_feature("differential tristate", pin, attrs,
+                            valid_xdrs=(0,), valid_attrs=True)
+        m = Module()
+
+        ff_o = Signal(pin.width)
+        ff_oe = Signal(pin.width)
+
+        if pin.xdr == 1:
+            pin.o.attrs["useioff"] = "1"
+            pin.oe.attrs["useioff"] = "1"
+
+        for bit in range(pin.width):
+            if pin.xdr == 0:
+                m.d.comb += ff_o[bit].eq(self._invert_if(invert, pin.o[bit]))
+                m.d.comb += ff_oe[bit].eq(pin.oe[bit])
+            elif pin.xdr == 1:
+                m.submodules["{}_dff_o__{}".format(pin.name, bit)] += Instance("dff",
+                    i_d=self._invert_if(invert, pin.o[bit]),
+                    i_clk=pin.i_clk,
+                    i_clrn=1,
+                    i_prn=1,
+                    o_q=ff_o[bit]
+                )
+                m.submodules["{}_dff_oe_{}".format(pin.name, bit)] += Instance("dff",
+                    i_d=pin.oe[bit],
+                    i_clk=pin.i_clk,
+                    i_clrn=1,
+                    i_prn=1,
+                    o_q=ff_oe[bit]
+                )
+
+            m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("alt_outbuf_tri_diff",
+                i_i=ff_o[bit],
+                i_oe=ff_oe[bit],
+                o_o=p_port[bit],
+                o_obar=n_port[bit]
+            )
+
+        return m
+
+    def get_diff_input_output(self, pin, p_port, n_port, attrs, invert):
+        self._check_feature("differential input/output", pin, attrs,
+                            valid_xdrs=(0,), valid_attrs=True)
+        m = Module()
+
+        ff_i = Signal(pin.width)
+        ff_o = Signal(pin.width)
+        ff_oe = Signal(pin.width)
+
+        if pin.xdr == 1:
+            pin.i.attrs["useioff"] = "1"
+            pin.o.attrs["useioff"] = "1"
+            pin.oe.attrs["useioff"] = "1"
+
+        for bit in range(pin.width):
+            if pin.xdr == 0:
+                m.d.comb += pin.i[bit].eq(self._invert_if(invert, ff_i[bit]))
+                m.d.comb += ff_o[bit].eq(self._invert_if(invert, pin.o[bit]))
+                m.d.comb += ff_oe[bit].eq(pin.oe[bit])
+            elif pin.xdr == 1:
+                m.submodules["{}_dff_i_{}".format(pin.name, bit)] += Instance("dff",
+                    i_d=self._invert_if(invert, ff_i[bit]),
+                    i_clk=pin.i_clk,
+                    i_clrn=1,
+                    i_prn=1,
+                    o_q=pin.i[bit]
+                )
+                m.submodules["{}_dff_o__{}".format(pin.name, bit)] += Instance("dff",
+                    i_d=self._invert_if(invert, pin.o[bit]),
+                    i_clk=pin.i_clk,
+                    i_clrn=1,
+                    i_prn=1,
+                    o_q=ff_o[bit]
+                )
+                m.submodules["{}_dff_oe_{}".format(pin.name, bit)] += Instance("dff",
+                    i_d=pin.oe[bit],
+                    i_clk=pin.i_clk,
+                    i_clrn=1,
+                    i_prn=1,
+                    o_q=ff_oe[bit]
+                )
+
+            m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("alt_iobuf_diff",
+                i_i=ff_o[bit],
+                i_oe=ff_oe[bit],
+                o_o=ff_i[bit],
+                io_io=p_port[bit],
+                io_iobar=n_port[bit]
+            )
+
+        return m

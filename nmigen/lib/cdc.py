@@ -29,15 +29,15 @@ class FFSynchronizer(Elaboratable):
         Signal connected to synchroniser output.
     o_domain : str
         Name of output clock domain.
-    stages : int
-        Number of synchronization stages between input and output. The lowest safe number is 2,
-        with higher numbers reducing MTBF further, at the cost of increased latency.
     reset : int
         Reset value of the flip-flops. On FPGAs, even if ``reset_less`` is True,
         the :class:`FFSynchronizer` is still set to this value during initialization.
     reset_less : bool
-        If True (the default), this :class:`FFSynchronizer` is unaffected by ``o_domain`` reset.
-        See "Note on Reset" below.
+        If ``True`` (the default), this :class:`FFSynchronizer` is unaffected by ``o_domain``
+        reset. See "Note on Reset" below.
+    stages : int
+        Number of synchronization stages between input and output. The lowest safe number is 2,
+        with higher numbers reducing MTBF further, at the cost of increased latency.
 
     Platform override
     -----------------
@@ -72,13 +72,16 @@ class FFSynchronizer(Elaboratable):
         self._reset_less = reset_less
         self._o_domain   = o_domain
         self._stages     = stages
+
         self._max_input_delay = max_input_delay
 
     def elaborate(self, platform):
         if hasattr(platform, "get_ff_sync"):
             return platform.get_ff_sync(self)
 
-        assert self._max_input_delay is None
+        if self._max_input_delay is not None:
+            raise NotImplementedError("Platform {!r} does not support constraining input delay "
+                                      "for FFSynchronizer".format(platform))
 
         m = Module()
         flops = [Signal(self.i.shape(), name="stage{}".format(index),
@@ -128,13 +131,16 @@ class ResetSynchronizer(Elaboratable):
 
         self._domain = domain
         self._stages = stages
-        self._max_input_delay = max_input_delay
+
+        self._max_input_delay = None
 
     def elaborate(self, platform):
         if hasattr(platform, "get_reset_sync"):
             return platform.get_reset_sync(self)
 
-        assert self._max_input_delay is None
+        if self._max_input_delay is not None:
+            raise NotImplementedError("Platform {!r} does not support constraining input delay "
+                                      "for ResetSynchronizer".format(platform))
 
         m = Module()
         m.domains += ClockDomain("reset_sync", async_reset=True, local=True)

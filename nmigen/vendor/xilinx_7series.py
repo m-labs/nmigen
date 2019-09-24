@@ -77,7 +77,7 @@ class Xilinx7SeriesPlatform(TemplatedPlatform):
                 read_xdc {{file}}
             {% endfor %}
             {{get_override("script_after_read")|default("# (script_after_read placeholder)")}}
-            synth_design -top {{name}} -part {{platform.device}}{{platform.package}}-{{platform.speed}}
+            synth_design -top {{name}}
             foreach cell [get_cells -quiet -hier -filter {nmigen.vivado.false_path == "TRUE"}] {
                 set_false_path -to $cell
             }

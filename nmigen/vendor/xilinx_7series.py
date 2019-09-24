@@ -372,6 +372,17 @@ class Xilinx7SeriesPlatform(TemplatedPlatform):
             )
         return m
 
+    # The synchronizer implementations below apply two separate but related timing constraints.
+    #
+    # First, the ASYNC_REG attribute prevents inference of shift registers from synchronizer FFs,
+    # and constraints the FFs to be placed as close as possible, ideally in one CLB. This attribute
+    # only affects the synchronizer FFs themselves.
+    #
+    # Second, the nmigen.vivado.false_path or nmigen.vivado.max_delay attribute affects the path
+    # into the synchronizer. If maximum input delay is specified, a datapath-only maximum delay
+    # constraint is applied, limiting routing delay (and therefore skew) at the synchronizer input.
+    # Otherwise, a false path constraint is used to omit the input path from the timing analysis.
+
     def get_ff_sync(self, ff_sync):
         m = Module()
         flops = [Signal(ff_sync.i.shape(), name="stage{}".format(index),

@@ -142,6 +142,8 @@ class AlteraPlatform(TemplatedPlatform):
             i_prn=1,
             o_q=dest
         )
+    
+    # Despite the altiobuf manual saying ENABLE_BUS_HOLD is optional, Quartus requires it to be specified.
 
     def get_input(self, pin, port, attrs, invert):
         self._check_feature("single-ended input", pin, attrs,
@@ -159,9 +161,11 @@ class AlteraPlatform(TemplatedPlatform):
 
             self._add_ff(m, pin.xdr, self._invert_if(invert, ff_i[bit]), pin.i[bit], clk, "i")
 
-            m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("alt_inbuf",
-                i_i=port[bit],
-                o_o=ff_i[bit]
+            m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("altiobuf_in",
+                p_NUMBER_OF_CHANNELS=1,
+                p_ENABLE_BUS_HOLD="FALSE",
+                i_datain=port[bit],
+                o_dataout=ff_i[bit]
             )
 
         return m
@@ -182,9 +186,11 @@ class AlteraPlatform(TemplatedPlatform):
 
             self._add_ff(m, pin.xdr, self._invert_if(invert, pin.o[bit]), ff_o[bit], clk, "o")
 
-            m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("alt_outbuf",
-                i_i=ff_o[bit],
-                o_o=port[bit]
+            m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("altiobuf_out",
+                p_NUMBER_OF_CHANNELS=1,
+                p_ENABLE_BUS_HOLD="FALSE", 
+                i_datain=ff_o[bit],
+                o_dataout=port[bit]
             )
             
         return m
@@ -208,10 +214,13 @@ class AlteraPlatform(TemplatedPlatform):
             self._add_ff(m, pin.xdr, self._invert_if(invert, pin.o[bit]), ff_o[bit], clk, "o")
             self._add_ff(m, pin.xdr, pin.oe[bit], ff_oe[bit], clk, "oe")
 
-            m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("alt_outbuf_tri",
-                i_i=ff_o[bit],
+            m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("altiobuf_out",
+                p_NUMBER_OF_CHANNELS=1,
+                p_ENABLE_BUS_HOLD="FALSE", 
+                p_USE_OE="TRUE",
+                i_datain=ff_o[bit],
                 i_oe=ff_oe[bit],
-                o_o=port[bit]
+                o_dataout=port[bit]
             )
 
         return m
@@ -239,11 +248,13 @@ class AlteraPlatform(TemplatedPlatform):
             self._add_ff(m, pin.xdr, self._invert_if(invert, pin.o[bit]), ff_o[bit], oclk, "o")
             self._add_ff(m, pin.xdr, pin.oe[bit], ff_oe[bit], oclk, "oe")
 
-            m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("alt_iobuf",
-                i_i=ff_o[bit],
+            m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("altiobuf_bidir",
+                p_NUMBER_OF_CHANNELS=1,
+                p_ENABLE_BUS_HOLD="FALSE", 
+                i_datain=ff_o[bit],
                 i_oe=ff_oe[bit],
-                o_o=ff_i[bit],
-                io_io=port[bit]
+                o_dataout=ff_i[bit],
+                io_dataio=port[bit]
             )
 
         return m
@@ -259,10 +270,13 @@ class AlteraPlatform(TemplatedPlatform):
             pin.i.attrs["useioff"] = "1"
 
         for bit in range(pin.width):
-            m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("alt_inbuf_diff",
-                i_i=p_port[bit],
-                i_ibar=n_port[bit],
-                o_o=ff_i[bit]
+            m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("altiobuf_in",
+                p_NUMBER_OF_CHANNELS=1,
+                p_ENABLE_BUS_HOLD="FALSE", 
+                p_USE_DIFFERENTIAL_MODE="TRUE",
+                i_datain=p_port[bit],
+                i_datain_b=n_port[bit],
+                o_dataout=ff_i[bit]
             )
             
             clk = pin.i_clk if pin.xdr != 0 else None
@@ -286,10 +300,13 @@ class AlteraPlatform(TemplatedPlatform):
 
             self._add_ff(m, pin.xdr, self._invert_if(invert, pin.o[bit]), ff_o[bit], pin.o_clk, "o")
 
-            m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("alt_outbuf_diff",
-                i_i=ff_o[bit],
-                o_o=p_port[bit],
-                o_obar=n_port[bit]
+            m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("altiobuf_out",
+                p_NUMBER_OF_CHANNELS=1,
+                p_ENABLE_BUS_HOLD="FALSE", 
+                p_USE_DIFFERENTIAL_MODE="TRUE",
+                i_datain=ff_o[bit],
+                o_dataout=p_port[bit],
+                o_dataout_b=n_port[bit]
             )
 
         return m
@@ -312,11 +329,15 @@ class AlteraPlatform(TemplatedPlatform):
             self._add_ff(m, pin.xdr, self._invert_if(invert, pin.o[bit]), ff_o[bit], clk, "o")
             self._add_ff(m, pin.xdr, pin.oe[bit], ff_oe[bit], clk, "oe")
 
-            m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("alt_outbuf_tri_diff",
-                i_i=ff_o[bit],
+            m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("altiobuf_out",
+                p_NUMBER_OF_CHANNELS=1,
+                p_ENABLE_BUS_HOLD="FALSE", 
+                p_USE_DIFFERENTIAL_MODE="TRUE",
+                p_USE_OE="TRUE",
+                i_datain=ff_o[bit],
                 i_oe=ff_oe[bit],
-                o_o=p_port[bit],
-                o_obar=n_port[bit]
+                o_dataout=p_port[bit],
+                o_dataout_b=n_port[bit]
             )
 
         return m
@@ -343,12 +364,15 @@ class AlteraPlatform(TemplatedPlatform):
             self._add_ff(m, pin.xdr, self._invert_if(invert, pin.o[bit]), ff_o[bit], oclk, "o")
             self._add_ff(m, pin.xdr, pin.oe[bit], ff_oe[bit], oclk, "oe")
 
-            m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("alt_iobuf_diff",
-                i_i=ff_o[bit],
+            m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("altiobuf_bidir",
+                p_NUMBER_OF_CHANNELS=1,
+                p_ENABLE_BUS_HOLD="FALSE", 
+                p_USE_DIFFERENTIAL_MODE="TRUE",
+                i_datain=ff_o[bit],
                 i_oe=ff_oe[bit],
-                o_o=ff_i[bit],
-                io_io=p_port[bit],
-                io_iobar=n_port[bit]
+                o_dataout=ff_i[bit],
+                io_dataio=p_port[bit],
+                io_dataio_b=n_port[bit]
             )
 
         return m

@@ -142,134 +142,186 @@ class AlteraPlatform(TemplatedPlatform):
             i_prn=1,
             o_q=dest
         )
-    
+  
     # Despite the altiobuf manual saying ENABLE_BUS_HOLD is optional, Quartus requires it to be specified.
 
     def get_input(self, pin, port, attrs, invert):
         self._check_feature("single-ended input", pin, attrs,
-                            valid_xdrs=(0,1), valid_attrs=True)
+                            valid_xdrs=(0,1,2), valid_attrs=True)
 
         m = Module()
 
         ff_i = Signal(pin.width)
 
-        if pin.xdr == 1:
+        if pin.xdr >= 1:
+            pin.i.attrs["useioff"] = "1"
+
+        for bit in range(pin.width):
+            if pin.xdr <= 1:
+                clk = pin.i_clk if pin.xdr != 0 else None
+
+                self._add_ff(m, pin.xdr, self._invert_if(invert, ff_i[bit]), pin.i[bit], clk, "i")
+
+                m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("altiobuf_in",
+                    p_NUMBER_OF_CHANNELS=1,
+                    p_ENABLE_BUS_HOLD="FALSE",
+                    i_datain=port[bit],
+                    o_dataout=ff_i[bit]
+                )
+            else:
+                m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("altddio_in",
+                    p_width=1,
+                    i_datain=port[bit],
+                    i_inclock=pin.i_clk,
+                    o_dataout_h=self._invert_if(pin.i0[bit]),
+                    o_dataout_l=self._invert_if(pin.i1[bit]),
+                )
+
+        return m
+
+    def get_output(self, pin, port, attrs, invert):
+        self._check_feature("single-ended output", pin, attrs,
+                            valid_xdrs=(0,1,2), valid_attrs=True)
+
+        m = Module()
+
+        ff_o = Signal(pin.width)
+
+        if pin.xdr >= 1:
+            pin.o.attrs["useioff"] = "1"
+
+        for bit in range(pin.width):
+            if pin.xdr <= 1:
+                clk = pin.o_clk if pin.xdr != 0 else None
+
+                self._add_ff(m, pin.xdr, self._invert_if(invert, pin.o[bit]), ff_o[bit], clk, "o")
+
+                m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("altiobuf_out",
+                    p_NUMBER_OF_CHANNELS=1,
+                    p_ENABLE_BUS_HOLD="FALSE", 
+                    i_datain=ff_o[bit],
+                    o_dataout=port[bit]
+                )
+            else:
+                m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("altddio_out",
+                    p_width=1,
+                    i_datain_h=self._invert_if(invert, pin.o0[bit]),
+                    i_datain_l=self._invert_if(invert, pin.o1[bit]),
+                    i_outclock=pin.o_clk,
+                    o_dataout=port[bit]
+                )
+                
+        return m
+
+    def get_tristate(self, pin, port, attrs, invert):
+        self._check_feature("single-ended tristate", pin, attrs,
+                            valid_xdrs=(0,1,2), valid_attrs=True)
+
+        m = Module()
+
+        ff_o = Signal(pin.width)
+        ff_oe = Signal(pin.width)
+
+        if pin.xdr >= 1:
+            pin.o.attrs["useioff"] = "1"
+            pin.oe.attrs["useioff"] = "1"
+
+        for bit in range(pin.width):
+            if pin.xdr <= 1:
+                clk = pin.o_clk if pin.xdr != 0 else None
+
+                self._add_ff(m, pin.xdr, self._invert_if(invert, pin.o[bit]), ff_o[bit], clk, "o")
+                self._add_ff(m, pin.xdr, pin.oe[bit], ff_oe[bit], clk, "oe")
+
+                m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("altiobuf_out",
+                    p_NUMBER_OF_CHANNELS=1,
+                    p_ENABLE_BUS_HOLD="FALSE", 
+                    p_USE_OE="TRUE",
+                    i_datain=ff_o[bit],
+                    i_oe=ff_oe[bit],
+                    o_dataout=port[bit]
+                )
+            else:
+                m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("altddio_out",
+                    p_width=1,
+                    p_oe_reg="REGISTERED",
+                    i_datain_h=self._invert_if(invert, pin.o0[bit]),
+                    i_datain_l=self._invert_if(invert, pin.o1[bit]),
+                    i_outclock=pin.o_clk,
+                    i_oe=pin.oe[bit],
+                    o_dataout=port[bit]
+                )
+
+        return m
+
+    def get_input_output(self, pin, port, attrs, invert):
+        self._check_feature("single-ended input/output", pin, attrs,
+                            valid_xdrs=(0,1,2), valid_attrs=True)
+
+        m = Module()
+
+        ff_i = Signal(pin.width)
+        ff_o = Signal(pin.width)
+        ff_oe = Signal(pin.width)
+
+        if pin.xdr >= 1:
+            pin.i.attrs["useioff"] = "1"
+            pin.o.attrs["useioff"] = "1"
+            pin.oe.attrs["useioff"] = "1"
+
+        for bit in range(pin.width):
+            if pin.xdr <= 1:
+                iclk = pin.i_clk if pin.xdr != 0 else None
+                oclk = pin.o_clk if pin.xdr != 0 else None
+
+                self._add_ff(m, pin.xdr, self._invert_if(invert, ff_i[bit]), pin.i[bit], iclk, "i")
+                self._add_ff(m, pin.xdr, self._invert_if(invert, pin.o[bit]), ff_o[bit], oclk, "o")
+                self._add_ff(m, pin.xdr, pin.oe[bit], ff_oe[bit], oclk, "oe")
+
+                m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("altiobuf_bidir",
+                    p_NUMBER_OF_CHANNELS=1,
+                    p_ENABLE_BUS_HOLD="FALSE", 
+                    i_datain=ff_o[bit],
+                    i_oe=ff_oe[bit],
+                    o_dataout=ff_i[bit],
+                    io_dataio=port[bit]
+                )
+            else:
+                out_high = Signal()
+                out_low = Signal()
+
+                m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("altddio_bidir",
+                    p_width=1,
+                    p_oe_reg="REGISTERED",
+                    i_datain_h=self._invert_if(invert, pin.o0[bit]),
+                    i_datain_l=self._invert_if(invert, pin.o1[bit]),
+                    i_inclock=pin.i_clk,
+                    i_outclock=pin.o_clk,
+                    o_dataout_h=out_high,
+                    o_dataout_l=out_low,
+                    io_padio=port[bit]
+                )
+
+                m.d.comb += pin.i0.eq(self._invert_if(invert, out_high))
+                m.d.comb += pin.i1.eq(self._invert_if(invert, out_low))
+
+        return m
+
+    def get_diff_input(self, pin, p_port, n_port, attrs, invert):
+        self._check_feature("differential input", pin, attrs,
+                            valid_xdrs=(0,1,2), valid_attrs=True)
+        m = Module()
+
+        ff_i = Signal(pin.width)
+
+        if pin.xdr >= 1:
             pin.i.attrs["useioff"] = "1"
 
         for bit in range(pin.width):
             clk = pin.i_clk if pin.xdr != 0 else None
 
             self._add_ff(m, pin.xdr, self._invert_if(invert, ff_i[bit]), pin.i[bit], clk, "i")
-
-            m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("altiobuf_in",
-                p_NUMBER_OF_CHANNELS=1,
-                p_ENABLE_BUS_HOLD="FALSE",
-                i_datain=port[bit],
-                o_dataout=ff_i[bit]
-            )
-
-        return m
-
-    def get_output(self, pin, port, attrs, invert):
-        self._check_feature("single-ended output", pin, attrs,
-                            valid_xdrs=(0,1), valid_attrs=True)
-
-        m = Module()
-
-        ff_o = Signal(pin.width)
-
-        if pin.xdr == 1:
-            pin.o.attrs["useioff"] = "1"
-
-        for bit in range(pin.width):
-            clk = pin.o_clk if pin.xdr != 0 else None
-
-            self._add_ff(m, pin.xdr, self._invert_if(invert, pin.o[bit]), ff_o[bit], clk, "o")
-
-            m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("altiobuf_out",
-                p_NUMBER_OF_CHANNELS=1,
-                p_ENABLE_BUS_HOLD="FALSE", 
-                i_datain=ff_o[bit],
-                o_dataout=port[bit]
-            )
-            
-        return m
-
-    def get_tristate(self, pin, port, attrs, invert):
-        self._check_feature("single-ended tristate", pin, attrs,
-                            valid_xdrs=(0,1), valid_attrs=True)
-
-        m = Module()
-
-        ff_o = Signal(pin.width)
-        ff_oe = Signal(pin.width)
-
-        if pin.xdr == 1:
-            pin.o.attrs["useioff"] = "1"
-            pin.oe.attrs["useioff"] = "1"
-
-        for bit in range(pin.width):
-            clk = pin.o_clk if pin.xdr != 0 else None
-
-            self._add_ff(m, pin.xdr, self._invert_if(invert, pin.o[bit]), ff_o[bit], clk, "o")
-            self._add_ff(m, pin.xdr, pin.oe[bit], ff_oe[bit], clk, "oe")
-
-            m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("altiobuf_out",
-                p_NUMBER_OF_CHANNELS=1,
-                p_ENABLE_BUS_HOLD="FALSE", 
-                p_USE_OE="TRUE",
-                i_datain=ff_o[bit],
-                i_oe=ff_oe[bit],
-                o_dataout=port[bit]
-            )
-
-        return m
-
-    def get_input_output(self, pin, port, attrs, invert):
-        self._check_feature("single-ended input/output", pin, attrs,
-                            valid_xdrs=(0,1), valid_attrs=True)
-
-        m = Module()
-
-        ff_i = Signal(pin.width)
-        ff_o = Signal(pin.width)
-        ff_oe = Signal(pin.width)
-
-        if pin.xdr == 1:
-            pin.i.attrs["useioff"] = "1"
-            pin.o.attrs["useioff"] = "1"
-            pin.oe.attrs["useioff"] = "1"
-
-        for bit in range(pin.width):
-            iclk = pin.i_clk if pin.xdr != 0 else None
-            oclk = pin.o_clk if pin.xdr != 0 else None
-
-            self._add_ff(m, pin.xdr, self._invert_if(invert, ff_i[bit]), pin.i[bit], iclk, "i")
-            self._add_ff(m, pin.xdr, self._invert_if(invert, pin.o[bit]), ff_o[bit], oclk, "o")
-            self._add_ff(m, pin.xdr, pin.oe[bit], ff_oe[bit], oclk, "oe")
-
-            m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("altiobuf_bidir",
-                p_NUMBER_OF_CHANNELS=1,
-                p_ENABLE_BUS_HOLD="FALSE", 
-                i_datain=ff_o[bit],
-                i_oe=ff_oe[bit],
-                o_dataout=ff_i[bit],
-                io_dataio=port[bit]
-            )
-
-        return m
-
-    def get_diff_input(self, pin, p_port, n_port, attrs, invert):
-        self._check_feature("differential input", pin, attrs,
-                            valid_xdrs=(0,1), valid_attrs=True)
-        m = Module()
-
-        ff_i = Signal(pin.width)
-
-        if pin.xdr == 1:
-            pin.i.attrs["useioff"] = "1"
-
-        for bit in range(pin.width):
+ 
             m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("altiobuf_in",
                 p_NUMBER_OF_CHANNELS=1,
                 p_ENABLE_BUS_HOLD="FALSE", 
@@ -279,10 +331,6 @@ class AlteraPlatform(TemplatedPlatform):
                 o_dataout=ff_i[bit]
             )
             
-            clk = pin.i_clk if pin.xdr != 0 else None
-
-            self._add_ff(m, pin.xdr, self._invert_if(invert, ff_i[bit]), pin.i[bit], clk, "i")
- 
         return m
 
     def get_diff_output(self, pin, p_port, n_port, attrs, invert):

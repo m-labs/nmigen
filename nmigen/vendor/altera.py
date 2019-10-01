@@ -380,7 +380,7 @@ class AlteraPlatform(TemplatedPlatform):
 
     def get_diff_tristate(self, pin, p_port, n_port, attrs, invert):
         self._check_feature("differential tristate", pin, attrs,
-                            valid_xdrs=(0,1), valid_attrs=True)
+                            valid_xdrs=(0,1,2), valid_attrs=True)
         m = Module()
 
         ff_o = Signal(pin.width)
@@ -391,11 +391,6 @@ class AlteraPlatform(TemplatedPlatform):
             pin.oe.attrs["useioff"] = "1"
 
         for bit in range(pin.width):
-            clk = pin.o_clk if pin.xdr != 0 else None
-
-            self._add_ff(m, pin.xdr, self._invert_if(invert, pin.o[bit]), ff_o[bit], clk, "o")
-            self._add_ff(m, pin.xdr, pin.oe[bit], ff_oe[bit], clk, "oe")
-
             m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("altiobuf_out",
                 p_NUMBER_OF_CHANNELS=1,
                 p_ENABLE_BUS_HOLD="FALSE",
@@ -406,6 +401,22 @@ class AlteraPlatform(TemplatedPlatform):
                 o_dataout=p_port[bit],
                 o_dataout_b=n_port[bit]
             )
+
+            if pin.xdr <= 1:
+                clk = pin.o_clk if pin.xdr != 0 else None
+
+                self._add_ff(m, pin.xdr, self._invert_if(invert, pin.o[bit]), ff_o[bit], clk, "o")
+                self._add_ff(m, pin.xdr, pin.oe[bit], ff_oe[bit], clk, "oe")
+            else:
+                self._add_ff(m, pin.xdr, pin.oe[bit], ff_oe[bit], clk, "oe")
+
+                m.submodules["{}_ddr_{}".format(pin.name, bit)] = Instance("altddio_out",
+                    p_width=1,
+                    i_datain_h=self._invert_if(invert, pin.o0[bit]),
+                    i_datain_l=self._invert_if(invert, pin.o1[bit]),
+                    i_outclock=pin.o_clk,
+                    o_dataout=ff_o[bit],
+                )
 
         return m
 

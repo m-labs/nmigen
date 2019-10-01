@@ -142,7 +142,7 @@ class AlteraPlatform(TemplatedPlatform):
             i_prn=1,
             o_q=dest
         )
- 
+
     # Despite the altiobuf manual saying ENABLE_BUS_HOLD is optional, Quartus requires it to be specified.
 
     def get_input(self, pin, port, attrs, invert):
@@ -198,7 +198,7 @@ class AlteraPlatform(TemplatedPlatform):
 
                 m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("altiobuf_out",
                     p_NUMBER_OF_CHANNELS=1,
-                    p_ENABLE_BUS_HOLD="FALSE", 
+                    p_ENABLE_BUS_HOLD="FALSE",
                     i_datain=ff_o[bit],
                     o_dataout=port[bit]
                 )
@@ -210,7 +210,7 @@ class AlteraPlatform(TemplatedPlatform):
                     i_outclock=pin.o_clk,
                     o_dataout=port[bit]
                 )
-                
+
         return m
 
     def get_tristate(self, pin, port, attrs, invert):
@@ -235,7 +235,7 @@ class AlteraPlatform(TemplatedPlatform):
 
                 m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("altiobuf_out",
                     p_NUMBER_OF_CHANNELS=1,
-                    p_ENABLE_BUS_HOLD="FALSE", 
+                    p_ENABLE_BUS_HOLD="FALSE",
                     p_USE_OE="TRUE",
                     i_datain=ff_o[bit],
                     i_oe=ff_oe[bit],
@@ -280,7 +280,7 @@ class AlteraPlatform(TemplatedPlatform):
 
                 m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("altiobuf_bidir",
                     p_NUMBER_OF_CHANNELS=1,
-                    p_ENABLE_BUS_HOLD="FALSE", 
+                    p_ENABLE_BUS_HOLD="FALSE",
                     i_datain=ff_o[bit],
                     i_oe=ff_oe[bit],
                     o_dataout=ff_i[bit],
@@ -318,61 +318,34 @@ class AlteraPlatform(TemplatedPlatform):
             pin.i.attrs["useioff"] = "1"
 
         for bit in range(pin.width):
+            m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("altiobuf_in",
+                p_NUMBER_OF_CHANNELS=1,
+                p_ENABLE_BUS_HOLD="FALSE",
+                p_USE_DIFFERENTIAL_MODE="TRUE",
+                i_datain=p_port[bit],
+                i_datain_b=n_port[bit],
+                o_dataout=ff_i[bit]
+            )
+
             if pin.xdr <= 1:
                 clk = pin.i_clk if pin.xdr != 0 else None
 
                 self._add_ff(m, pin.xdr, self._invert_if(invert, ff_i[bit]), pin.i[bit], clk, "i")
 
-                m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("altiobuf_in",
-                    p_NUMBER_OF_CHANNELS=1,
-                    p_ENABLE_BUS_HOLD="FALSE", 
-                    p_USE_DIFFERENTIAL_MODE="TRUE",
-                    i_datain=p_port[bit],
-                    i_datain_b=n_port[bit],
-                    o_dataout=ff_i[bit]
-                )
             else:
-                p_posedge = Signal()
-                p_negedge = Signal()
-                n_posedge = Signal()
-                n_negedge = Signal()
+                m.submodules["{}_ddr_{}".format(pin.name, bit)] = Instance("altddio_in",
+                    p_width=1,
+                    i_datain=self._invert_if(invert, ff_i[bit]),
+                    i_inclock=pin.i_clk,
+                    o_dataout_h=pin.i0[bit],
+                    o_dataout_l=pin.i1[bit],
+                )
 
-                m.submodules["{}_ddr_p_{}".format(pin.name, bit)] = Instance("altddio_in",
-                    p_width=1,
-                    i_datain=p_port[bit],
-                    i_inclock=pin.i_clk,
-                    o_dataout_h=p_posedge,
-                    o_dataout_l=p_negedge,
-                )
-                m.submodules["{}_ddr_n_{}".format(pin.name, bit)] = Instance("altddio_in",
-                    p_width=1,
-                    i_datain=n_port[bit],
-                    i_inclock=pin.i_clk,
-                    o_dataout_h=n_posedge,
-                    o_dataout_l=n_negedge,
-                )
-                m.submodules["{}_buf_p_{}".format(pin.name, bit)] = Instance("altiobuf_in",
-                    p_NUMBER_OF_CHANNELS=1,
-                    p_ENABLE_BUS_HOLD="FALSE", 
-                    p_USE_DIFFERENTIAL_MODE="TRUE",
-                    i_datain=p_posedge,
-                    i_datain_b=n_posedge,
-                    o_dataout=self._invert_if(pin.i0[bit])
-                )
-                m.submodules["{}_buf_n_{}".format(pin.name, bit)] = Instance("altiobuf_in",
-                    p_NUMBER_OF_CHANNELS=1,
-                    p_ENABLE_BUS_HOLD="FALSE", 
-                    p_USE_DIFFERENTIAL_MODE="TRUE",
-                    i_datain=p_negedge,
-                    i_datain_b=n_negedge,
-                    o_dataout=self._invert_if(pin.i1[bit])
-                )
-             
         return m
 
     def get_diff_output(self, pin, p_port, n_port, attrs, invert):
         self._check_feature("differential output", pin, attrs,
-                            valid_xdrs=(0,1), valid_attrs=True)
+                            valid_xdrs=(0,1,2), valid_attrs=True)
         m = Module()
 
         ff_o = Signal(pin.width)
@@ -381,54 +354,26 @@ class AlteraPlatform(TemplatedPlatform):
             pin.o.attrs["useioff"] = "1"
 
         for bit in range(pin.width):
+            m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("altiobuf_out",
+                p_NUMBER_OF_CHANNELS=1,
+                p_ENABLE_BUS_HOLD="FALSE",
+                p_USE_DIFFERENTIAL_MODE="TRUE",
+                i_datain=ff_o[bit],
+                o_dataout=p_port[bit],
+                o_dataout_b=n_port[bit]
+            )
+             
             if pin.xdr <= 1:
                 clk = pin.o_clk if pin.xdr != 0 else None
 
                 self._add_ff(m, pin.xdr, self._invert_if(invert, pin.o[bit]), ff_o[bit], pin.o_clk, "o")
-
-                m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("altiobuf_out",
-                    p_NUMBER_OF_CHANNELS=1,
-                    p_ENABLE_BUS_HOLD="FALSE", 
-                    p_USE_DIFFERENTIAL_MODE="TRUE",
-                    i_datain=ff_o[bit],
-                    o_dataout=p_port[bit],
-                    o_dataout_b=n_port[bit]
-                )
-            else:
-                p_posedge = Signal()
-                p_negedge = Signal()
-                n_posedge = Signal()
-                n_negedge = Signal()
-
-                m.submodules["{}_ddr_p_{}".format(pin.name, bit)] = Instance("altddio_out",
+           else:
+                m.submodules["{}_ddr_{}".format(pin.name, bit)] = Instance("altddio_out",
                     p_width=1,
-                    i_datain_h=p_posedge,
-                    i_datain_l=p_negedge,
+                    i_datain_h=self._invert_if(invert, pin.o0[bit]),
+                    i_datain_l=self._invert_if(invert, pin.o1[bit]),
                     i_outclock=pin.o_clk,
-                    o_dataout=p_port[bit],
-                )
-                m.submodules["{}_ddr_n_{}".format(pin.name, bit)] = Instance("altddio_out",
-                    p_width=1,
-                    i_datain_h=n_posedge,
-                    i_datain_l=n_negedge,
-                    i_outclock=pin.o_clk,
-                    o_dataout=n_port[bit],
-                )
-                m.submodules["{}_buf_p_{}".format(pin.name, bit)] = Instance("altiobuf_out",
-                    p_NUMBER_OF_CHANNELS=1,
-                    p_ENABLE_BUS_HOLD="FALSE", 
-                    p_USE_DIFFERENTIAL_MODE="TRUE",
-                    i_datain=self._invert_if(invert, pin.o0[bit]),
-                    o_dataout=p_posedge,
-                    o_dataout_b=n_posedge,
-                )
-                m.submodules["{}_buf_n_{}".format(pin.name, bit)] = Instance("altiobuf_out",
-                    p_NUMBER_OF_CHANNELS=1,
-                    p_ENABLE_BUS_HOLD="FALSE", 
-                    p_USE_DIFFERENTIAL_MODE="TRUE",
-                    i_datain=self._invert_if(invert, pin.o1[bit]),
-                    o_dataout=p_negedge,
-                    o_dataout_b=n_negedge,
+                    o_dataout=ff_o[bit],
                 )
 
         return m
@@ -453,7 +398,7 @@ class AlteraPlatform(TemplatedPlatform):
 
             m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("altiobuf_out",
                 p_NUMBER_OF_CHANNELS=1,
-                p_ENABLE_BUS_HOLD="FALSE", 
+                p_ENABLE_BUS_HOLD="FALSE",
                 p_USE_DIFFERENTIAL_MODE="TRUE",
                 p_USE_OE="TRUE",
                 i_datain=ff_o[bit],
@@ -488,7 +433,7 @@ class AlteraPlatform(TemplatedPlatform):
 
             m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("altiobuf_bidir",
                 p_NUMBER_OF_CHANNELS=1,
-                p_ENABLE_BUS_HOLD="FALSE", 
+                p_ENABLE_BUS_HOLD="FALSE",
                 p_USE_DIFFERENTIAL_MODE="TRUE",
                 i_datain=ff_o[bit],
                 i_oe=ff_oe[bit],

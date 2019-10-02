@@ -362,7 +362,7 @@ class AlteraPlatform(TemplatedPlatform):
                 o_dataout=p_port[bit],
                 o_dataout_b=n_port[bit]
             )
-             
+
             if pin.xdr <= 1:
                 clk = pin.o_clk if pin.xdr != 0 else None
 
@@ -422,7 +422,7 @@ class AlteraPlatform(TemplatedPlatform):
 
     def get_diff_input_output(self, pin, p_port, n_port, attrs, invert):
         self._check_feature("differential input/output", pin, attrs,
-                            valid_xdrs=(0,1), valid_attrs=True)
+                            valid_xdrs=(0,1,2), valid_attrs=True)
         m = Module()
 
         ff_i = Signal(pin.width)
@@ -435,13 +435,6 @@ class AlteraPlatform(TemplatedPlatform):
             pin.oe.attrs["useioff"] = "1"
 
         for bit in range(pin.width):
-            iclk = pin.i_clk if pin.xdr != 0 else None
-            oclk = pin.o_clk if pin.xdr != 0 else None
-
-            self._add_ff(m, pin.xdr, self._invert_if(invert, ff_i[bit]), pin.i[bit], iclk, "i")
-            self._add_ff(m, pin.xdr, self._invert_if(invert, pin.o[bit]), ff_o[bit], oclk, "o")
-            self._add_ff(m, pin.xdr, pin.oe[bit], ff_oe[bit], oclk, "oe")
-
             m.submodules["{}_buf_{}".format(pin.name, bit)] = Instance("altiobuf_bidir",
                 p_NUMBER_OF_CHANNELS=1,
                 p_ENABLE_BUS_HOLD="FALSE",
@@ -452,5 +445,29 @@ class AlteraPlatform(TemplatedPlatform):
                 io_dataio=p_port[bit],
                 io_dataio_b=n_port[bit]
             )
+
+            if pin.xdr <= 1:
+                iclk = pin.i_clk if pin.xdr != 0 else None
+                oclk = pin.o_clk if pin.xdr != 0 else None
+
+                self._add_ff(m, pin.xdr, self._invert_if(invert, ff_i[bit]), pin.i[bit], iclk, "i")
+                self._add_ff(m, pin.xdr, self._invert_if(invert, pin.o[bit]), ff_o[bit], oclk, "o")
+                self._add_ff(m, pin.xdr, pin.oe[bit], ff_oe[bit], oclk, "oe")
+            else:
+                m.submodules["{}_ddr_i_{}".format(pin.name, bit)] = Instance("altddio_in",
+                    p_width=1,
+                    i_datain=self._invert_if(invert, ff_i[bit]),
+                    i_inclock=pin.i_clk,
+                    o_dataout_h=pin.i0[bit],
+                    o_dataout_l=pin.i1[bit],
+                )
+
+                m.submodules["{}_ddr_o_{}".format(pin.name, bit)] = Instance("altddio_out",
+                    p_width=1,
+                    i_datain_h=self._invert_if(invert, pin.o0[bit]),
+                    i_datain_l=self._invert_if(invert, pin.o1[bit]),
+                    i_outclock=pin.o_clk,
+                    o_dataout=ff_o[bit],
+                )
 
         return m

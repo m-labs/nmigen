@@ -371,3 +371,36 @@ class IntelPlatform(TemplatedPlatform):
             i_oe=self._get_oereg(m, pin),
         )
         return m
+
+    def get_ff_sync(self, ff_sync):
+        assert ff_sync._stages >= 2, "the synchronizer must be at least 2 stages long"
+
+        m = Module()
+        m.submodules += Instance("altera_std_synchronizer",
+            p_depth=ff_sync._stages, 
+            i_clk=ClockSignal(ff_sync._o_domain),
+            i_reset_n=1,
+            i_din=ff_sync.i,
+            o_dout=ff_sync.o,
+        )
+        return m
+
+    def get_reset_sync(self, reset_sync):
+        assert reset_sync._stages >= 2, "the synchronizer must be at least 2 stages long"
+
+        m = Module()
+        reset = Signal()
+        reset_clk = ClockSignal(reset_sync._domain)
+        m.submodules += Instance("altera_std_synchronizer",
+            p_depth=reset_sync._stages,
+            i_clk=reset_clk,
+            i_reset_n=~reset_sync.arst,
+            i_din=1,
+            o_dout=reset,
+        )
+        m.d.comb += [
+            ClockSignal("reset_sync").eq(reset_clk),
+            ResetSignal("reset_sync").eq(reset_sync.arst),
+            ResetSignal(reset_sync._domain).eq(reset)
+        ]
+        return m

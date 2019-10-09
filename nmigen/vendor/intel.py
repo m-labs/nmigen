@@ -373,8 +373,6 @@ class IntelPlatform(TemplatedPlatform):
         return m
 
     def get_ff_sync(self, ff_sync):
-        assert ff_sync._stages >= 2, "the synchronizer must be at least 2 stages long"
-
         m = Module()
         m.submodules += Instance("altera_std_synchronizer",
             p_depth=ff_sync._stages, 
@@ -386,8 +384,6 @@ class IntelPlatform(TemplatedPlatform):
         return m
 
     def get_reset_sync(self, reset_sync):
-        assert reset_sync._stages >= 2, "the synchronizer must be at least 2 stages long"
-
         m = Module()
         reset = Signal()
         reset_clk = ClockSignal(reset_sync._domain)

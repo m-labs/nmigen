@@ -385,14 +385,11 @@ class IntelPlatform(TemplatedPlatform):
 
     def get_reset_sync(self, reset_sync):
         m = Module()
-        reset = Signal()
-        reset_clk = ClockSignal(reset_sync._domain)
         m.submodules += Instance("altera_std_synchronizer",
             p_depth=reset_sync._stages,
-            i_clk=reset_clk,
+            i_clk=ClockSignal(reset_sync._domain),
             i_reset_n=~reset_sync.arst,
             i_din=1,
-            o_dout=reset,
+            o_dout=ResetSignal(reset_sync._domain),
         )
-        m.d.comb += ResetSignal(reset_sync._domain).eq(reset)
         return m

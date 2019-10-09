@@ -394,9 +394,5 @@ class IntelPlatform(TemplatedPlatform):
             i_din=1,
             o_dout=reset,
         )
-        m.d.comb += [
-            ClockSignal("reset_sync").eq(reset_clk),
-            ResetSignal("reset_sync").eq(reset_sync.arst),
-            ResetSignal(reset_sync._domain).eq(reset)
-        ]
+        m.d.comb += ResetSignal(reset_sync._domain).eq(reset)
         return m

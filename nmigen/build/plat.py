@@ -303,7 +303,6 @@ class TemplatedPlatform(Platform):
                 commands.append(template.format(env_var=env_var, name=name))
             return "\n".join(commands)
 
-
         def emit_commands(syntax):
             commands = []
             for index, command_tpl in enumerate(self.command_templates):

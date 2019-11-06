@@ -49,14 +49,16 @@ class Platform(ResourceManager, metaclass=ABCMeta):
     def add_file(self, filename, content):
         if not isinstance(filename, str):
             raise TypeError("File name must be a string")
-        if filename in self.extra_files:
-            raise ValueError("File {} already exists"
-                             .format(filename))
         if hasattr(content, "read"):
             content = content.read()
         elif not isinstance(content, (str, bytes)):
             raise TypeError("File contents must be str, bytes, or a file-like object")
-        self.extra_files[filename] = content
+        if filename in self.extra_files:
+            if self.extra_files[filename] != content:
+                raise ValueError("File {} already exists"
+                                 .format(filename))
+        else:
+            self.extra_files[filename] = content
 
     @property
     def _toolchain_env_var(self):

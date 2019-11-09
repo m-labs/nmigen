@@ -11,7 +11,7 @@ def main_parser(parser=None):
     if parser is None:
         parser = argparse.ArgumentParser()
 
-    p_action = parser.add_subparsers(dest="action")
+    p_action = parser.add_subparsers(dest="action", required=True)
 
     p_generate = p_action.add_parser("generate",
         help="generate RTLIL or Verilog from the design")
@@ -38,10 +38,15 @@ def main_parser(parser=None):
         metavar="COUNT", type=int, required=True,
         help="simulate for COUNT 'sync' clock periods")
 
+    p_build = p_action.add_parser(
+        "build", help="build the design using nMigen's build system")
+    p_build.add_argument("-p", "--program", action="store_true",
+        help="program the platform with the built design")
+
     return parser
 
 
-def main_runner(parser, args, design, platform=None, name="top", ports=()):
+def main_runner(parser, args, design, platform=None, name="top", ports=(), build_args={}):
     if args.action == "generate":
         fragment = Fragment.get(design, platform)
         generate_type = args.generate_type
@@ -69,6 +74,12 @@ def main_runner(parser, args, design, platform=None, name="top", ports=()):
                 traces=ports) as sim:
             sim.add_clock(args.sync_period)
             sim.run_until(args.sync_period * args.sync_clocks, run_passive=True)
+    
+    if args.action == "build":
+        if platform is not None:
+            platform.build(design, do_program=args.program, **build_args)
+        else:
+            raise Exception("program never defined platform to build on")
 
 
 def main(*args, **kwargs):

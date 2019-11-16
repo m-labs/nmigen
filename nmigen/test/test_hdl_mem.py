@@ -42,6 +42,19 @@ class MemoryTestCase(FHDLTestCase):
                     "'str' object cannot be interpreted as an integer"):
             m = Memory(width=8, depth=4, init=[1, "0"])
 
+    def test_reset_less(self):
+        mem = Memory(width=8, depth=4, reset_less=True)
+        self.assertEqual(mem.reset_less, True)
+
+        orig_reset_less = Memory.reset_less
+        Memory.reset_less = True
+        mem = Memory(width=8, depth=4)
+        self.assertEqual(mem.reset_less, True)
+        Memory.reset_less = False
+        mem = Memory(width=8, depth=4)
+        self.assertEqual(mem.reset_less, False)
+        Memory.reset_less = orig_reset_less
+
     def test_read_port_transparent(self):
         mem    = Memory(width=8, depth=4)
         rdport = mem.read_port()

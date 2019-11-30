@@ -39,6 +39,7 @@ class IntelPlatform(TemplatedPlatform):
     suffix  = ""
 
     quartus_suppressed_warnings = [
+        10264,  # All case item expressions in this case statement are onehot
         10270,  # Incomplete Verilog case statement has no default case item
         10335,  # Unrecognized synthesis attribute
         10763,  # Verilog case statement has overlapping case item expressions with non-constant or don't care bits
@@ -112,7 +113,7 @@ class IntelPlatform(TemplatedPlatform):
         """,
         "{{name}}.srf": r"""
             {% for warning in platform.quartus_suppressed_warnings %}
-            { "" "" "" "*" {  } {  } 0 {{warning}} "" 0 0 "Design Software" 0 -1 0 ""}
+            { "" "" "" "{{name}}.v" {  } {  } 0 {{warning}} "" 0 0 "Design Software" 0 -1 0 ""}
             {% endfor %}
         """,      
     }

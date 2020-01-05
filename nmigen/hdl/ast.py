@@ -1502,7 +1502,7 @@ class ValueKey:
             self._hash = hash((self.value.operator,
                                tuple(ValueKey(o) for o in self.value.operands)))
         elif isinstance(self.value, Slice):
-            self._hash = hash((ValueKey(self.value.value), self.value.start, self.value.end))
+            self._hash = hash((ValueKey(self.value.value), self.value.start, self.value.stop))
         elif isinstance(self.value, Part):
             self._hash = hash((ValueKey(self.value.value), ValueKey(self.value.offset),
                               self.value.width, self.value.stride))

@@ -797,7 +797,7 @@ class Signal(Value, DUID):
         name this ``Signal`` is assigned to. Name collisions are automatically resolved by
         prepending names of objects that contain this ``Signal`` and by appending integer
         sequences.
-    reset : int
+    reset : int or reset.value is int
         Reset (synchronous) or default (combinatorial) value.
         When this ``Signal`` is assigned to in synchronous context and the corresponding clock
         domain is reset, the ``Signal`` assumes the given value. When this ``Signal`` is unassigned
@@ -833,6 +833,9 @@ class Signal(Value, DUID):
     def __init__(self, shape=None, *, name=None, reset=0, reset_less=False, min=None, max=None,
                  attrs=None, decoder=None, src_loc_at=0):
         super().__init__(src_loc_at=src_loc_at)
+
+        if hasattr(reset, "value"):
+            reset = reset.value
 
         # TODO(nmigen-0.2): move this to nmigen.compat and make it a deprecated extension
         if min is not None or max is not None:

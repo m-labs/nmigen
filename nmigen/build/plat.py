@@ -282,11 +282,11 @@ class TemplatedPlatform(Platform):
         def emit_rtlil():
             return rtlil_text
 
-        def emit_verilog(opts=()):
+        def emit_verilog(opts=kwargs.get("write_verilog_opts", ())):
             return verilog._convert_rtlil_text(rtlil_text,
                 strip_internal_attrs=True, write_verilog_opts=opts)
 
-        def emit_debug_verilog(opts=()):
+        def emit_debug_verilog(opts=kwargs.get("write_verilog_opts", ())):
             return verilog._convert_rtlil_text(rtlil_text,
                 strip_internal_attrs=False, write_verilog_opts=opts)
 

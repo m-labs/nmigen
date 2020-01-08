@@ -221,8 +221,10 @@ class IntelPlatform(TemplatedPlatform):
 
     @staticmethod
     def _get_oereg(m, pin):
+        # altiobuf_ requires an output enable signal for each pin, nmigen is generating
+        # only one output enable for a multi bit io pin
         if pin.xdr == 0:
-            return pin.oe
+            return Repl(pin.oe, pin.width)
         elif pin.xdr in (1, 2):
             oe_reg = Signal(pin.width, name="{}_oe_reg".format(pin.name))
             oe_reg.attrs["useioff"] = "1"

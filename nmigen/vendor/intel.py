@@ -285,7 +285,7 @@ class IntelPlatform(TemplatedPlatform):
             p_use_oe="TRUE",
             i_datain=self._get_oreg(m, pin, invert),
             o_dataout=port,
-            i_oe=pin.oe,
+            i_oe=self._get_oereg(m, pin)
         )
         return m
 

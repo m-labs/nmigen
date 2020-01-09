@@ -221,8 +221,7 @@ class IntelPlatform(TemplatedPlatform):
 
     @staticmethod
     def _get_oereg(m, pin):
-        # altiobuf_ requires an output enable signal for each pin, nmigen is generating
-        # only one output enable for a multi bit io pin
+        # altiobuf_ requires an output enable signal for each pin, but pin.oe is 1 bit wide.
         if pin.xdr == 0:
             return Repl(pin.oe, pin.width)
         elif pin.xdr in (1, 2):

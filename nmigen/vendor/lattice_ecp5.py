@@ -289,7 +289,7 @@ class LatticeECP5Platform(TemplatedPlatform):
     @property
     def default_clk_constraint(self):
         if self.default_clk == "OSCG":
-            return Clock(self.oscg_freq)
+            return Clock(310e6 / self.oscg_div)
         return super().default_clk_constraint
 
     def create_missing_domain(self, name):
@@ -302,8 +302,13 @@ class LatticeECP5Platform(TemplatedPlatform):
         if name == "sync" and self.default_clk is not None:
             m = Module()
             if self.default_clk == "OSCG":
+                if not hasattr(self, 'oscg_div'):
+                    raise ValueError("OSCG divider (oscg_div) must be an integer between 2 and 128")
+                if not isinstance(self.oscg_div, int) or self.oscg_div < 2 or self.oscg_div > 128:
+                    raise ValueError("OSCG divider (oscg_div) must be an integer between 2 and 128, not {!r}"
+                                      .format(self.oscg_div))
                 clk_i = Signal()
-                m.submodules += Instance("OSCG", p_DIV=128, o_OSC=clk_i)
+                m.submodules += Instance("OSCG", p_DIV=self.oscg_div, o_OSC=clk_i)
             else:
                 clk_i = self.request(self.default_clk).i
             if self.default_rst is not None:

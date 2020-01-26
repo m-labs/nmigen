@@ -14,8 +14,8 @@ class Pins:
 
         if conn is not None:
             conn_name, conn_number = conn
-            if not (isinstance(conn_name, str) and isinstance(conn_number, int)):
-                raise TypeError("Connector must be None or a pair of string and integer, not {!r}"
+            if not (isinstance(conn_name, str) and isinstance(conn_number, (int, str))):
+                raise TypeError("Connector must be None or a pair of string and integer/string, not {!r}"
                                 .format(conn))
             names = ["{}_{}:{}".format(conn_name, conn_number, name) for name in names]
 
@@ -236,8 +236,8 @@ class Connector:
 
         if conn is not None:
             conn_name, conn_number = conn
-            if not (isinstance(conn_name, str) and isinstance(conn_number, int)):
-                raise TypeError("Connector must be None or a pair of string and integer, not {!r}"
+            if not (isinstance(conn_name, str) and isinstance(conn_number, (int, str))):
+                raise TypeError("Connector must be None or a pair of string and integer/string, not {!r}"
                                 .format(conn))
 
             for conn_pin, plat_pin in mapping.items():

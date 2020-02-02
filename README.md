@@ -12,26 +12,24 @@ Other nMigen libraries are built on FHDL and provide various tools and logic cor
 
 See the [doc/](doc/) folder for more technical information.
 
-nMigen is a direct descendant of [Migen][] rewritten from scratch to address many issues that became clear in the many years Migen has been used in production. nMigen provides an extensive [compatibility layer](#migration-from-migen) that makes it possible to build and simulate most Migen designs unmodified, as well as integrate modules written for Migen and nMigen.
+nMigen is based on [Migen][], a hardware description language developed by [M-Labs][]. Although Migen works very well in production, its design could be improved in many fundamental ways, and nMigen reimplements Migen concepts from scratch to do so. nMigen also provides an extensive [compatibility layer](#migration-from-migen) that makes it possible to build and simulate most Migen designs unmodified, as well as integrate modules written for Migen and nMigen.
 
 nMigen is designed for Python 3.6 and newer. nMigen's Verilog backend requires [Yosys][] 0.9 or a newer version.
 
-Thanks [LambdaConcept][] for being a sponsor of this project! Contact sb [at] m-labs.hk if you also wish to support this work.
+The development of nMigen has been supported by [SymbioticEDA][], [LambdaConcept][] and [M-Labs][].
 
 [migen]: https://m-labs.hk/migen
 [yosys]: http://www.clifford.at/yosys/
+[symbioticeda]: https://www.symbioticeda.com/
 [lambdaconcept]: http://lambdaconcept.com/
-
-### HLS?
-
-nMigen is *not* a "Python-to-FPGA" conventional high level synthesis (HLS) tool. It will *not* take a Python program as input and generate a hardware implementation of it. In nMigen, the Python program is executed by a regular Python interpreter, and it emits explicit statements in the FHDL domain-specific language.  Writing a conventional HLS tool that uses nMigen as an internal component might be a good idea, on the other hand :)
+[m-labs]: http://m-labs.hk
 
 ### Installation
 
 nMigen requires [Yosys][] 0.9 or newer, as well as a device-specific toolchain.
 
-    pip install git+https://github.com/m-labs/nmigen.git
-    pip install git+https://github.com/m-labs/nmigen-boards.git
+    pip install git+https://github.com/nmigen/nmigen.git
+    pip install git+https://github.com/nmigen/nmigen-boards.git
 
 ### Introduction
 
@@ -70,7 +68,7 @@ nMigen is released under the very permissive two-clause BSD license. Under the t
 
 Even though we do not require you to do so, these things are awesome, so please do them if possible:
   * tell us that you are using nMigen
-  * put the [nMigen logo](doc/nmigen_logo.svg) on the page of a product using it, with a link to https://m-labs.hk
+  * put the [nMigen logo](doc/nmigen_logo.svg) on the page of a product using it
   * cite nMigen in publications related to research it has helped
   * send us feedback and suggestions for improvements
   * send us bug reports when something goes wrong

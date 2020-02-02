@@ -6,6 +6,7 @@ import traceback
 import sys
 
 from .._utils import *
+from .._unused import *
 from .ast import *
 from .cd import *
 
@@ -13,41 +14,12 @@ from .cd import *
 __all__ = ["UnusedElaboratable", "Elaboratable", "DriverConflict", "Fragment", "Instance"]
 
 
-class UnusedElaboratable(Warning):
+class UnusedElaboratable(UnusedMustUse):
     pass
 
 
-class Elaboratable(metaclass=ABCMeta):
-    _Elaboratable__silence = False
-
-    def __new__(cls, *args, src_loc_at=0, **kwargs):
-        frame = sys._getframe(1 + src_loc_at)
-        self = super().__new__(cls)
-        self._Elaboratable__used    = False
-        self._Elaboratable__context = dict(
-            filename=frame.f_code.co_filename,
-            lineno=frame.f_lineno,
-            source=self)
-        return self
-
-    def __del__(self):
-        if self._Elaboratable__silence:
-            return
-        if hasattr(self, "_Elaboratable__used") and not self._Elaboratable__used:
-            if get_linter_option(self._Elaboratable__context["filename"],
-                                 "UnusedElaboratable", bool, True):
-                warnings.warn_explicit(
-                    "{!r} created but never used".format(self), UnusedElaboratable,
-                    **self._Elaboratable__context)
-
-
-_old_excepthook = sys.excepthook
-def _silence_elaboratable(type, value, traceback):
-    # Don't show anything if the interpreter crashed; that'd just obscure the exception
-    # traceback instead of helping.
-    Elaboratable._Elaboratable__silence = True
-    _old_excepthook(type, value, traceback)
-sys.excepthook = _silence_elaboratable
+class Elaboratable(MustUse, metaclass=ABCMeta):
+    _MustUse__warning = UnusedElaboratable
 
 
 class DriverConflict(UserWarning):
@@ -63,7 +35,7 @@ class Fragment:
                 return obj
             elif isinstance(obj, Elaboratable):
                 code = obj.elaborate.__code__
-                obj._Elaboratable__used = True
+                obj._MustUse__used = True
                 obj = obj.elaborate(platform)
             elif hasattr(obj, "elaborate"):
                 warnings.warn(
@@ -149,7 +121,9 @@ class Fragment:
         yield from self.domains
 
     def add_statements(self, *stmts):
-        self.statements += Statement.cast(stmts)
+        for stmt in Statement.cast(stmts):
+            stmt._MustUse__used = True
+            self.statements.append(stmt)
 
     def add_subfragment(self, subfragment, name=None):
         assert isinstance(subfragment, Fragment)
@@ -369,7 +343,7 @@ class Fragment:
 
             subfrag._propagate_domains_down()
 
-    def create_missing_domains(self, missing_domain, *, platform=None):
+    def _create_missing_domains(self, missing_domain, *, platform=None):
         from .xfrm import DomainCollector
 
         collector = DomainCollector()
@@ -399,11 +373,11 @@ class Fragment:
                 self.add_domains(new_fragment.domains.values())
         return new_domains
 
-    def _propagate_domains(self, missing_domain):
+    def _propagate_domains(self, missing_domain, *, platform=None):
         self._propagate_domains_up()
         self._propagate_domains_down()
         self._resolve_hierarchy_conflicts()
-        new_domains = self.create_missing_domains(missing_domain)
+        new_domains = self._create_missing_domains(missing_domain, platform=platform)
         self._propagate_domains_down()
         return new_domains
 

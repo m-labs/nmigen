@@ -9,7 +9,11 @@ __all__ = ["Memory", "ReadPort", "WritePort", "DummyPort"]
 
 
 class Memory:
-    def __init__(self, *, width, depth, init=None, name=None, simulate=True):
+    # Configuration options to configure default behaviour for all generated memories
+    # These options should only be set in top level of code and not in modules
+    reset_less = False
+
+    def __init__(self, *, width, depth, init=None, name=None, simulate=True, reset_less=None):
         if not isinstance(width, int) or width < 0:
             raise TypeError("Memory width must be a non-negative integer, not {!r}"
                             .format(width))
@@ -29,6 +33,9 @@ class Memory:
             for addr in range(self.depth):
                 self._array.append(Signal(self.width, name="{}({})"
                                           .format(name or "memory", addr)))
+
+        if reset_less is not None:
+            self.reset_less = reset_less
 
         self.init = init
 

@@ -832,10 +832,12 @@ def _convert_fragment(builder, fragment, name_map, hierarchy):
                             data_mask = (1 << memory.width) - 1
                             for addr in range(memory.depth):
                                 if addr < len(memory.init):
-                                    data = memory.init[addr] & data_mask
+                                    data = "{:0{}b}".format(
+                                        memory.init[addr] & data_mask, memory.width
+                                    )
                                 else:
-                                    data = 0
-                                data_parts.append("{:0{}b}".format(data, memory.width))
+                                    data = ("0" if not memory.reset_less else "x") * memory.width
+                                data_parts.append(data)
                             module.cell("$meminit", ports={
                                 "\\ADDR": rhs_compiler(ast.Const(0, addr_bits)),
                                 "\\DATA": "{}'".format(memory.width * memory.depth) +

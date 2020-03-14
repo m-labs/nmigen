@@ -14,8 +14,6 @@ See the [doc/](doc/) folder for more technical information.
 
 nMigen is based on [Migen][], a hardware description language developed by [M-Labs][]. Although Migen works very well in production, its design could be improved in many fundamental ways, and nMigen reimplements Migen concepts from scratch to do so. nMigen also provides an extensive [compatibility layer](#migration-from-migen) that makes it possible to build and simulate most Migen designs unmodified, as well as integrate modules written for Migen and nMigen.
 
-nMigen is designed for Python 3.6 and newer. nMigen's Verilog backend requires [Yosys][] 0.9 or a newer version.
-
 The development of nMigen has been supported by [M-Labs][] and [LambdaConcept][].
 
 [migen]: https://m-labs.hk/migen
@@ -29,7 +27,7 @@ nMigen is *not* a "Python-to-FPGA" conventional high level synthesis (HLS) tool.
 
 ### Installation
 
-nMigen requires [Yosys][] 0.9 or newer, as well as a device-specific toolchain.
+nMigen requires Python 3.6 (or newer), [Yosys][] 0.9 (or newer), as well as a device-specific toolchain.
 
     pip install git+https://github.com/m-labs/nmigen.git
     pip install git+https://github.com/m-labs/nmigen-boards.git
@@ -64,6 +62,10 @@ If you are already familiar with [Migen][], the good news is that nMigen provide
 Note that nMigen will **not** produce the exact same RTL as Migen did. nMigen has been built to allow you to take advantage of the new and improved functionality it has (such as producing hierarchical RTL) while making migration as painless as possible.
 
 Once your design passes verification with nMigen, you can migrate it to the nMigen syntax one module at a time. Migen modules can be added to nMigen modules and vice versa, so there is no restriction on the order of migration, either.
+
+### Community
+
+nMigen discussions take place on the M-Labs IRC channel, [#m-labs at freenode.net](https://webchat.freenode.net/?channels=m-labs). Feel free to join to ask questions about using nMigen or discuss ongoing development of nMigen and its related projects.
 
 ### License
 

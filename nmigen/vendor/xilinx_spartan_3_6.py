@@ -132,9 +132,9 @@ class XilinxSpartan3Or6Platform(TemplatedPlatform):
                     NET "{{port_name}}" {{attr_name}}={{attr_value}};
                 {% endfor %}
             {% endfor %}
-            {% for signal, frequency in platform.iter_clock_constraints() -%}
-                NET "{{signal|hierarchy("/")}}" TNM_NET="PRD{{signal|hierarchy("/")}}";
-                TIMESPEC "TS{{signal|hierarchy("/")}}"=PERIOD "PRD{{signal|hierarchy("/")}}" {{1000000000/frequency}} ns HIGH 50%;
+            {% for net_signal, port_signal, frequency in platform.iter_clock_constraints() -%}
+                NET "{{net_signal|hierarchy("/")}}" TNM_NET="PRD{{net_signal|hierarchy("/")}}";
+                TIMESPEC "TS{{net_signal|hierarchy("/")}}"=PERIOD "PRD{{net_signal|hierarchy("/")}}" {{1000000000/frequency}} ns HIGH 50%;
             {% endfor %}
             {{get_override("add_constraints")|default("# (add_constraints placeholder)")}}
         """
@@ -437,24 +437,30 @@ class XilinxSpartan3Or6Platform(TemplatedPlatform):
         m.d.comb += ff_sync.o.eq(flops[-1])
         return m
 
-    def get_reset_sync(self, reset_sync):
-        if reset_sync._max_input_delay is not None:
+    def get_async_ff_sync(self, async_ff_sync):
+        if self._max_input_delay is not None:
             raise NotImplementedError("Platform '{}' does not support constraining input delay "
-                                      "for ResetSynchronizer"
+                                      "for AsyncFFSynchronizer"
                                       .format(type(self).__name__))
 
         m = Module()
-        m.domains += ClockDomain("reset_sync", async_reset=True, local=True)
+        m.domains += ClockDomain("async_ff", async_reset=True, local=True)
         flops = [Signal(1, name="stage{}".format(index), reset=1,
                         attrs={"ASYNC_REG": "TRUE"})
-                 for index in range(reset_sync._stages)]
+                 for index in range(async_ff_sync._stages)]
         for i, o in zip((0, *flops), flops):
-            m.d.reset_sync += o.eq(i)
+            m.d.async_ff += o.eq(i)
+
+        if async_ff_sync._edge == "pos":
+            m.d.comb += ResetSignal("async_ff").eq(asnyc_ff_sync.i)
+        else:
+            m.d.comb += ResetSignal("async_ff").eq(~asnyc_ff_sync.i)
+
         m.d.comb += [
-            ClockSignal("reset_sync").eq(ClockSignal(reset_sync._domain)),
-            ResetSignal("reset_sync").eq(reset_sync.arst),
-            ResetSignal(reset_sync._domain).eq(flops[-1])
+            ClockSignal("async_ff").eq(ClockSignal(asnyc_ff_sync._domain)),
+            async_ff_sync.o.eq(flops[-1])
         ]
+
         return m
 
 XilinxSpartan3APlatform = XilinxSpartan3Or6Platform

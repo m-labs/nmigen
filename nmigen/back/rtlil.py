@@ -454,6 +454,10 @@ class _RHSValueCompiler(_ValueCompiler):
 
     def on_Operator_unary(self, value):
         arg, = value.operands
+        if value.operator in ("u", "s"):
+            # These operators don't change the bit pattern, only its interpretation.
+            return self(arg)
+
         arg_bits, arg_sign = arg.shape()
         res_bits, res_sign = value.shape()
         res = self.s.rtlil.wire(width=res_bits, src=src(value.src_loc))
@@ -826,7 +830,7 @@ def _convert_fragment(builder, fragment, name_map, hierarchy):
                         memory = param_value
                         if memory not in memories:
                             memories[memory] = module.memory(width=memory.width, size=memory.depth,
-                                                             name=memory.name)
+                                                             name=memory.name, attrs=memory.attrs)
                             addr_bits = bits_for(memory.depth)
                             data_parts = []
                             data_mask = (1 << memory.width) - 1

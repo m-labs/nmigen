@@ -38,6 +38,7 @@ class XilinxUltraScalePlatform(TemplatedPlatform):
         * ``{{name}}_clock_utilization.rpt``:  Vivado report.
         * ``{{name}}_route_status.rpt``: Vivado report.
         * ``{{name}}_drc.rpt``: Vivado report.
+        * ``{{name}}_methodology.rpt``: Vivado report.
         * ``{{name}}_timing.rpt``: Vivado report.
         * ``{{name}}_power.rpt``: Vivado report.
         * ``{{name}}_route.dcp``: Vivado design checkpoint.
@@ -116,6 +117,7 @@ class XilinxUltraScalePlatform(TemplatedPlatform):
             write_checkpoint -force {{name}}_route.dcp
             report_route_status -file {{name}}_route_status.rpt
             report_drc -file {{name}}_drc.rpt
+            report_methodology -file {{name}}_methodology.rpt
             report_timing_summary -datasheet -max_paths 10 -file {{name}}_timing.rpt
             report_power -file {{name}}_power.rpt
             {{get_override("script_before_bitstream")|default("# (script_before_bitstream placeholder)")}}
@@ -131,8 +133,12 @@ class XilinxUltraScalePlatform(TemplatedPlatform):
                     set_property {{attr_name}} {{attr_value}} [get_ports {{port_name}}]
                 {% endfor %}
             {% endfor %}
-            {% for signal, frequency in platform.iter_clock_constraints() -%}
-                create_clock -name {{signal.name}} -period {{1000000000/frequency}} [get_nets {{signal|hierarchy("/")}}]
+            {% for net_signal, port_signal, frequency in platform.iter_clock_constraints() -%}
+                {% if port_signal is not none -%}
+                    create_clock -name {{port_signal.name}} -period {{1000000000/frequency}} [get_ports {{port_signal.name}}]
+                {% else -%}
+                    create_clock -name {{net_signal.name}} -period {{1000000000/frequency}} [get_nets {{net_signal|hierarchy("/")}}]
+                {% endif %}
             {% endfor %}
             {{get_override("add_constraints")|default("# (add_constraints placeholder)")}}
         """
@@ -397,21 +403,27 @@ class XilinxUltraScalePlatform(TemplatedPlatform):
         m.d.comb += ff_sync.o.eq(flops[-1])
         return m
 
-    def get_reset_sync(self, reset_sync):
+    def get_async_ff_sync(self, async_ff_sync):
         m = Module()
-        m.domains += ClockDomain("reset_sync", async_reset=True, local=True)
+        m.domains += ClockDomain("async_ff", async_reset=True, local=True)
         flops = [Signal(1, name="stage{}".format(index), reset=1,
                         attrs={"ASYNC_REG": "TRUE"})
-                 for index in range(reset_sync._stages)]
-        if reset_sync._max_input_delay is None:
+                 for index in range(async_ff_sync._stages)]
+        if async_ff_sync._max_input_delay is None:
             flops[0].attrs["nmigen.vivado.false_path"] = "TRUE"
         else:
-            flops[0].attrs["nmigen.vivado.max_delay"] = str(reset_sync._max_input_delay * 1e9)
+            flops[0].attrs["nmigen.vivado.max_delay"] = str(async_ff_sync._max_input_delay * 1e9)
         for i, o in zip((0, *flops), flops):
-            m.d.reset_sync += o.eq(i)
+            m.d.async_ff += o.eq(i)
+
+        if async_ff_sync._edge == "pos":
+            m.d.comb += ResetSignal("async_ff").eq(asnyc_ff_sync.i)
+        else:
+            m.d.comb += ResetSignal("async_ff").eq(~asnyc_ff_sync.i)
+
         m.d.comb += [
-            ClockSignal("reset_sync").eq(ClockSignal(reset_sync._domain)),
-            ResetSignal("reset_sync").eq(reset_sync.arst),
-            ResetSignal(reset_sync._domain).eq(flops[-1])
+            ClockSignal("async_ff").eq(ClockSignal(asnyc_ff_sync._domain)),
+            async_ff_sync.o.eq(flops[-1])
         ]
+
         return m

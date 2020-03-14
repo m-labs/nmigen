@@ -54,6 +54,97 @@ class FFSynchronizerTestCase(FHDLTestCase):
         sim.run()
 
 
+class AsyncFFSynchronizerTestCase(FHDLTestCase):
+    def test_stages_wrong(self):
+        with self.assertRaises(TypeError,
+                msg="Synchronization stage count must be a positive integer, not 0"):
+            ResetSynchronizer(Signal(), stages=0)
+        with self.assertRaises(ValueError,
+                msg="Synchronization stage count may not safely be less than 2"):
+            ResetSynchronizer(Signal(), stages=1)
+
+    def test_edge_wrong(self):
+        with self.assertRaises(ValueError,
+                msg="AsyncFFSynchronizer async edge must be one of 'pos' or 'neg', not 'xxx'"):
+            AsyncFFSynchronizer(Signal(), Signal(), domain="sync", async_edge="xxx")
+
+    def test_pos_edge(self):
+        i = Signal()
+        o = Signal()
+        m = Module()
+        m.domains += ClockDomain("sync")
+        m.submodules += AsyncFFSynchronizer(i, o)
+
+        sim = Simulator(m)
+        sim.add_clock(1e-6)
+        def process():
+            # initial reset
+            self.assertEqual((yield i), 0)
+            self.assertEqual((yield o), 1)
+            yield Tick(); yield Delay(1e-8)
+            self.assertEqual((yield o), 1)
+            yield Tick(); yield Delay(1e-8)
+            self.assertEqual((yield o), 0)
+            yield Tick(); yield Delay(1e-8)
+            self.assertEqual((yield o), 0)
+            yield Tick(); yield Delay(1e-8)
+
+            yield i.eq(1)
+            yield Delay(1e-8)
+            self.assertEqual((yield o), 1)
+            yield Tick(); yield Delay(1e-8)
+            self.assertEqual((yield o), 1)
+            yield i.eq(0)
+            yield Tick(); yield Delay(1e-8)
+            self.assertEqual((yield o), 1)
+            yield Tick(); yield Delay(1e-8)
+            self.assertEqual((yield o), 0)
+            yield Tick(); yield Delay(1e-8)
+            self.assertEqual((yield o), 0)
+            yield Tick(); yield Delay(1e-8)
+        sim.add_process(process)
+        with sim.write_vcd("test.vcd"):
+            sim.run()
+
+    def test_neg_edge(self):
+        i = Signal(reset=1)
+        o = Signal()
+        m = Module()
+        m.domains += ClockDomain("sync")
+        m.submodules += AsyncFFSynchronizer(i, o, async_edge="neg")
+
+        sim = Simulator(m)
+        sim.add_clock(1e-6)
+        def process():
+            # initial reset
+            self.assertEqual((yield i), 1)
+            self.assertEqual((yield o), 1)
+            yield Tick(); yield Delay(1e-8)
+            self.assertEqual((yield o), 1)
+            yield Tick(); yield Delay(1e-8)
+            self.assertEqual((yield o), 0)
+            yield Tick(); yield Delay(1e-8)
+            self.assertEqual((yield o), 0)
+            yield Tick(); yield Delay(1e-8)
+
+            yield i.eq(0)
+            yield Delay(1e-8)
+            self.assertEqual((yield o), 1)
+            yield Tick(); yield Delay(1e-8)
+            self.assertEqual((yield o), 1)
+            yield i.eq(1)
+            yield Tick(); yield Delay(1e-8)
+            self.assertEqual((yield o), 1)
+            yield Tick(); yield Delay(1e-8)
+            self.assertEqual((yield o), 0)
+            yield Tick(); yield Delay(1e-8)
+            self.assertEqual((yield o), 0)
+            yield Tick(); yield Delay(1e-8)
+        sim.add_process(process)
+        with sim.write_vcd("test.vcd"):
+            sim.run()
+
+
 class ResetSynchronizerTestCase(FHDLTestCase):
     def test_stages_wrong(self):
         with self.assertRaises(TypeError,
@@ -100,3 +191,39 @@ class ResetSynchronizerTestCase(FHDLTestCase):
         sim.add_process(process)
         with sim.write_vcd("test.vcd"):
             sim.run()
+
+
+# TODO: test with distinct clocks
+class PulseSynchronizerTestCase(FHDLTestCase):
+    def test_paramcheck(self):
+        with self.assertRaises(TypeError):
+            ps = PulseSynchronizer("w", "r", sync_stages=0)
+        with self.assertRaises(TypeError):
+            ps = PulseSynchronizer("w", "r", sync_stages="abc")
+        ps = PulseSynchronizer("w", "r", sync_stages = 1)
+
+    def test_smoke(self):
+        m = Module()
+        m.domains += ClockDomain("sync")
+        ps = m.submodules.dut = PulseSynchronizer("sync", "sync")
+
+        sim = Simulator(m)
+        sim.add_clock(1e-6)
+        def process():
+            yield ps.i.eq(0)
+            # TODO: think about reset
+            for n in range(5):
+                yield Tick()
+            # Make sure no pulses are generated in quiescent state
+            for n in range(3):
+                yield Tick()
+                self.assertEqual((yield ps.o), 0)
+            # Check conservation of pulses
+            accum = 0
+            for n in range(10):
+                yield ps.i.eq(1 if n < 4 else 0)
+                yield Tick()
+                accum += yield ps.o
+            self.assertEqual(accum, 4)
+        sim.add_process(process)
+        sim.run()

@@ -107,15 +107,19 @@ class IntelPlatform(TemplatedPlatform):
             set_global_assignment -name GENERATE_RBF_FILE ON
         """,
         "{{name}}.sdc": r"""
-            {% for signal, frequency in platform.iter_clock_constraints() -%}
-                create_clock -period {{1000000000/frequency}} [get_nets {{signal|hierarchy("|")}}]
+            {% for net_signal, port_signal, frequency in platform.iter_clock_constraints() -%}
+                {% if port_signal is not none -%}
+                    create_clock -name {{port_signal.name}} -period {{1000000000/frequency}} [get_ports {{port_signal.name}}]
+                {% else -%}
+                    create_clock -name {{net_signal.name}} -period {{1000000000/frequency}} [get_nets {{net_signal|hierarchy("|")}}]
+                {% endif %}
             {% endfor %}
         """,
         "{{name}}.srf": r"""
             {% for warning in platform.quartus_suppressed_warnings %}
             { "" "" "" "{{name}}.v" {  } {  } 0 {{warning}} "" 0 0 "Design Software" 0 -1 0 ""}
             {% endfor %}
-        """,      
+        """,
     }
     command_templates = [
         r"""
@@ -396,15 +400,24 @@ class IntelPlatform(TemplatedPlatform):
             o_dout=ff_sync.o,
         )
 
-    def get_reset_sync(self, reset_sync):
+    def get_async_ff_sync(self, async_ff_sync):
         m = Module()
-        rst_n = Signal()
-        m.submodules += Instance("altera_std_synchronizer",
-            p_depth=reset_sync._stages,
-            i_clk=ClockSignal(reset_sync._domain),
-            i_reset_n=~reset_sync.arst,
-            i_din=Const(1),
-            o_dout=rst_n,
-        )
-        m.d.comb += ResetSignal(reset_sync._domain).eq(~rst_n)
+        sync_output = Signal()
+        if async_ff_sync._edge == "pos":
+            m.submodules += Instance("altera_std_synchronizer",
+                p_depth=async_ff_sync._stages,
+                i_clk=ClockSignal(async_ff_sync._domain),
+                i_reset_n=~async_ff_sync.i,
+                i_din=Const(1),
+                o_dout=sync_output,
+            )
+        else:
+            m.submodules += Instance("altera_std_synchronizer",
+                p_depth=async_ff_sync._stages,
+                i_clk=ClockSignal(async_ff_sync._domain),
+                i_reset_n=async_ff_sync.i,
+                i_din=Const(1),
+                o_dout=sync_output,
+            )
+        m.d.comb += async_ff_sync.o.eq(~sync_output)
         return m

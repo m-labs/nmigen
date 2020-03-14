@@ -239,6 +239,26 @@ class Value(metaclass=ABCMeta):
         else:
             raise TypeError("Cannot index value with {}".format(repr(key)))
 
+    def as_unsigned(self):
+        """Conversion to unsigned.
+
+        Returns
+        -------
+        Value, out
+            This ``Value`` reinterpreted as a unsigned integer.
+        """
+        return Operator("u", [self])
+
+    def as_signed(self):
+        """Conversion to signed.
+
+        Returns
+        -------
+        Value, out
+            This ``Value`` reinterpreted as a signed integer.
+        """
+        return Operator("s", [self])
+
     def bool(self):
         """Conversion to boolean.
 
@@ -552,6 +572,10 @@ class Operator(Value):
                 return Shape(a_width + 1, True)
             if self.operator in ("b", "r|", "r&", "r^"):
                 return Shape(1, False)
+            if self.operator == "u":
+                return Shape(a_width, False)
+            if self.operator == "s":
+                return Shape(a_width, True)
         elif len(op_shapes) == 2:
             (a_width, a_signed), (b_width, b_signed) = op_shapes
             if self.operator in ("+", "-"):
@@ -1183,7 +1207,7 @@ class Initial(Value):
     An ``Initial`` signal is ``1`` at the first cycle of model checking, and ``0`` at any other.
     """
     def __init__(self, *, src_loc_at=0):
-        super().__init__(src_loc_at=1 + src_loc_at)
+        super().__init__(src_loc_at=src_loc_at)
 
     def shape(self):
         return Shape(1)

@@ -1,6 +1,9 @@
-import inspect
+import os
+import tempfile
 import warnings
+import inspect
 from contextlib import contextmanager
+import itertools
 from vcd import VCDWriter
 from vcd.gtkw import GTKWSave
 
@@ -85,7 +88,18 @@ class _VCDWaveformWriter(_WaveformWriter):
         self.gtkw_file = gtkw_file
         self.gtkw_save = gtkw_file and GTKWSave(self.gtkw_file)
 
-        for signal, names in signal_names.items():
+        self.traces = []
+
+        trace_names = SignalDict()
+        for trace in traces:
+            if trace not in signal_names:
+                trace_names[trace] = trace.name
+            self.traces.append(trace)
+
+        if self.vcd_writer is None:
+            return
+
+        for signal, names in itertools.chain(signal_names.items(), trace_names.items()):
             if signal.decoder:
                 var_type = "string"
                 var_size = 1
@@ -130,21 +144,23 @@ class _VCDWaveformWriter(_WaveformWriter):
             self.vcd_writer.change(vcd_var, vcd_timestamp, var_value)
 
     def close(self, timestamp):
-        self.vcd_writer.close(self.timestamp_to_vcd(timestamp))
+        if self.vcd_writer is not None:
+            self.vcd_writer.close(self.timestamp_to_vcd(timestamp))
 
         if self.gtkw_save is not None:
             self.gtkw_save.dumpfile(self.vcd_file.name)
             self.gtkw_save.dumpfile_size(self.vcd_file.tell())
 
             self.gtkw_save.treeopen("top")
-            for signal, hierarchy in self.gtkw_names.items():
+            for signal in self.traces:
                 if len(signal) > 1 and not signal.decoder:
                     suffix = "[{}:0]".format(len(signal) - 1)
                 else:
                     suffix = ""
-                self.gtkw_save.trace(".".join(hierarchy) + suffix)
+                self.gtkw_save.trace(".".join(self.gtkw_names[signal]) + suffix)
 
-        self.vcd_file.close()
+        if self.vcd_file is not None:
+            self.vcd_file.close()
         if self.gtkw_file is not None:
             self.gtkw_file.close()
 
@@ -417,6 +433,9 @@ class _RHSValueCompiler(_ValueCompiler):
             if value.operator == "r^":
                 # Believe it or not, this is the fastest way to compute a sideways XOR in Python.
                 return f"(format({mask(arg)}, 'b').count('1') % 2)"
+            if value.operator in ("u", "s"):
+                # These operators don't change the bit pattern, only its interpretation.
+                return self(arg)
         elif len(value.operands) == 2:
             lhs, rhs = value.operands
             lhs_mask = (1 << len(lhs)) - 1
@@ -473,7 +492,9 @@ class _RHSValueCompiler(_ValueCompiler):
             part_mask = (1 << len(part)) - 1
             gen_parts.append(f"(({self(part)} & {part_mask}) << {offset})")
             offset += len(part)
-        return f"({' | '.join(gen_parts)})"
+        if gen_parts:
+            return f"({' | '.join(gen_parts)})"
+        return f"0"
 
     def on_Repl(self, value):
         part_mask = (1 << len(value.value)) - 1
@@ -483,7 +504,9 @@ class _RHSValueCompiler(_ValueCompiler):
         for _ in range(value.count):
             gen_parts.append(f"({gen_part} << {offset})")
             offset += len(value.value)
-        return f"({' | '.join(gen_parts)})"
+        if gen_parts:
+            return f"({' | '.join(gen_parts)})"
+        return f"0"
 
     def on_ArrayProxy(self, value):
         index_mask = (1 << len(value.index)) - 1
@@ -695,9 +718,6 @@ class _FragmentCompiler:
                 self.signal_names[signal].add(hierarchical_signal_name)
 
         for domain_name, domain_signals in fragment.drivers.items():
-            for domain_signal in domain_signals:
-                add_signal_name(domain_signal)
-
             domain_stmts = LHSGroupFilter(domain_signals)(fragment.statements)
             domain_process = _CompiledProcess(self.state, comb=domain_name is None,
                 name=".".join((*hierarchy, "<{}>".format(domain_name or "comb"))))
@@ -747,11 +767,25 @@ class _FragmentCompiler:
                 signal_index = domain_process.context.get_signal(signal)
                 emitter.append(f"slots[{signal_index}].set(next_{signal_index})")
 
+            # There shouldn't be any exceptions raised by the generated code, but if there are
+            # (almost certainly due to a bug in the code generator), use this environment variable
+            # to make backtraces useful.
+            code = emitter.flush()
+            if os.getenv("NMIGEN_pysim_dump"):
+                file = tempfile.NamedTemporaryFile("w", prefix="nmigen_pysim_", delete=False)
+                file.write(code)
+                filename = file.name
+            else:
+                filename = "<string>"
+
             exec_locals = {"slots": domain_process.context.slots, **_ValueCompiler.helpers}
-            exec(emitter.flush(), exec_locals)
+            exec(compile(code, filename, "exec"), exec_locals)
             domain_process.run = exec_locals["run"]
 
             processes.add(domain_process)
+
+            for used_signal in domain_process.context.indexes:
+                add_signal_name(used_signal)
 
         for subfragment_index, (subfragment, subfragment_name) in enumerate(fragment.subfragments):
             if subfragment_name is None:

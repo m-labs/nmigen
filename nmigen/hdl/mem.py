@@ -1,4 +1,5 @@
 import operator
+from collections import OrderedDict
 
 from .. import tracer
 from .ast import *
@@ -9,7 +10,32 @@ __all__ = ["Memory", "ReadPort", "WritePort", "DummyPort"]
 
 
 class Memory:
-    def __init__(self, *, width, depth, init=None, name=None, simulate=True):
+    """A word addressable storage.
+
+    Parameters
+    ----------
+    width : int
+        Access granularity. Each storage element of this memory is ``width`` bits in size.
+    depth : int
+        Word count. This memory contains ``depth`` storage elements.
+    init : list of int
+        Initial values. At power on, each storage element in this memory is initialized to
+        the corresponding element of ``init``, if any, or to zero otherwise.
+        Uninitialized memories are not currently supported.
+    name : str
+        Name hint for this memory. If ``None`` (default) the name is inferred from the variable
+        name this ``Signal`` is assigned to.
+    attrs : dict
+        Dictionary of synthesis attributes.
+
+    Attributes
+    ----------
+    width : int
+    depth : int
+    init : list of int
+    attrs : dict
+    """
+    def __init__(self, *, width, depth, init=None, name=None, attrs=None, simulate=True):
         if not isinstance(width, int) or width < 0:
             raise TypeError("Memory width must be a non-negative integer, not {!r}"
                             .format(width))
@@ -22,6 +48,7 @@ class Memory:
 
         self.width = width
         self.depth = depth
+        self.attrs = OrderedDict(() if attrs is None else attrs)
 
         # Array of signals for simulation.
         self._array = Array()

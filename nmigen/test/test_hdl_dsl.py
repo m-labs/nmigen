@@ -582,12 +582,19 @@ class DSLTestCase(FHDLTestCase):
             with m.FSM(domain="comb"):
                 pass
 
+    def test_FSM_wrong_undefined(self):
+        m = Module()
+        with self.assertRaises(NameError,
+                msg="FSM state 'FOO' is referenced but not defined"):
+            with m.FSM() as fsm:
+                fsm.ongoing("FOO")
+
     def test_FSM_wrong_redefined(self):
         m = Module()
         with m.FSM():
             with m.State("FOO"):
                 pass
-            with self.assertRaises(SyntaxError,
+            with self.assertRaises(NameError,
                     msg="FSM state 'FOO' is already defined"):
                 with m.State("FOO"):
                     pass
@@ -706,6 +713,21 @@ class DSLTestCase(FHDLTestCase):
         m.domains.foo = ClockDomain()
         self.assertEqual(len(m._domains), 1)
         self.assertEqual(m._domains[0].name, "foo")
+
+    def test_domain_add_wrong(self):
+        m = Module()
+        with self.assertRaises(TypeError,
+                msg="Only clock domains may be added to `m.domains`, not 1"):
+            m.domains.foo = 1
+        with self.assertRaises(TypeError,
+                msg="Only clock domains may be added to `m.domains`, not 1"):
+            m.domains += 1
+
+    def test_domain_add_wrong_name(self):
+        m = Module()
+        with self.assertRaises(NameError,
+                msg="Clock domain name 'bar' must match name in `m.domains.foo += ...` syntax"):
+            m.domains.foo = ClockDomain("bar")
 
     def test_lower(self):
         m1 = Module()

@@ -9,6 +9,7 @@ from .._utils import flatten, bits_for, deprecated
 from .. import tracer
 from .ast import *
 from .ir import *
+from .cd import *
 from .xfrm import *
 
 
@@ -107,10 +108,20 @@ class _ModuleBuilderDomainSet:
 
     def __iadd__(self, domains):
         for domain in flatten([domains]):
+            if not isinstance(domain, ClockDomain):
+                raise TypeError("Only clock domains may be added to `m.domains`, not {!r}"
+                                .format(domain))
             self._builder._add_domain(domain)
         return self
 
     def __setattr__(self, name, domain):
+        if not isinstance(domain, ClockDomain):
+            raise TypeError("Only clock domains may be added to `m.domains`, not {!r}"
+                            .format(domain))
+        if domain.name != name:
+            raise NameError("Clock domain name {!r} must match name in `m.domains.{} += ...` "
+                            "syntax"
+                            .format(domain.name, name))
         self._builder._add_domain(domain)
 
 
@@ -364,6 +375,10 @@ class Module(_ModuleBuilderRoot, Elaboratable):
             self._ctrl_context = "FSM"
             self.domain._depth += 1
             yield fsm
+            for state_name in fsm_data["encoding"]:
+                if state_name not in fsm_data["states"]:
+                    raise NameError("FSM state '{}' is referenced but not defined"
+                                    .format(state_name))
         finally:
             self.domain._depth -= 1
             self._ctrl_context = None
@@ -375,7 +390,7 @@ class Module(_ModuleBuilderRoot, Elaboratable):
         src_loc = tracer.get_src_loc(src_loc_at=1)
         fsm_data = self._get_ctrl("FSM")
         if name in fsm_data["states"]:
-            raise SyntaxError("FSM state '{}' is already defined".format(name))
+            raise NameError("FSM state '{}' is already defined".format(name))
         if name not in fsm_data["encoding"]:
             fsm_data["encoding"][name] = len(fsm_data["encoding"])
         try:

@@ -35,8 +35,8 @@ class ShapeTestCase(FHDLTestCase):
         self.assertEqual(s3.signed, True)
 
     def test_make_wrong(self):
-        with self.assertRaises(TypeError,
-                msg="Width must be a non-negative integer, not -1"):
+        with self.assertRaisesRegex(TypeError,
+                r"^Width must be a non-negative integer, not -1$"):
             Shape(-1)
 
     def test_tuple(self):
@@ -70,8 +70,8 @@ class ShapeTestCase(FHDLTestCase):
         self.assertEqual(s1.signed, False)
 
     def test_cast_int_wrong(self):
-        with self.assertRaises(TypeError,
-                msg="Width must be a non-negative integer, not -1"):
+        with self.assertRaisesRegex(TypeError,
+                r"^Width must be a non-negative integer, not -1$"):
             Shape.cast(-1)
 
     def test_cast_tuple(self):
@@ -84,8 +84,8 @@ class ShapeTestCase(FHDLTestCase):
     def test_cast_tuple_wrong(self):
         with warnings.catch_warnings():
             warnings.filterwarnings(action="ignore", category=DeprecationWarning)
-            with self.assertRaises(TypeError,
-                    msg="Width must be a non-negative integer, not -1"):
+            with self.assertRaisesRegex(TypeError,
+                    r"^Width must be a non-negative integer, not -1$"):
                 Shape.cast((-1, True))
 
     def test_cast_range(self):
@@ -120,13 +120,13 @@ class ShapeTestCase(FHDLTestCase):
         self.assertEqual(s2.signed, True)
 
     def test_cast_enum_bad(self):
-        with self.assertRaises(TypeError,
-                msg="Only enumerations with integer values can be used as value shapes"):
+        with self.assertRaisesRegex(TypeError,
+                r"^Only enumerations with integer values can be used as value shapes$"):
             Shape.cast(StringEnum)
 
     def test_cast_bad(self):
-        with self.assertRaises(TypeError,
-                msg="Object 'foo' cannot be used as value shape"):
+        with self.assertRaisesRegex(TypeError,
+                r"^Object 'foo' cannot be used as value shape$"):
             Shape.cast("foo")
 
 
@@ -136,8 +136,8 @@ class ValueTestCase(FHDLTestCase):
         self.assertIsInstance(Value.cast(True), Const)
         c = Const(0)
         self.assertIs(Value.cast(c), c)
-        with self.assertRaises(TypeError,
-                msg="Object 'str' cannot be converted to an nMigen value"):
+        with self.assertRaisesRegex(TypeError,
+                r"^Object 'str' cannot be converted to an nMigen value$"):
             Value.cast("str")
 
     def test_cast_enum(self):
@@ -149,13 +149,13 @@ class ValueTestCase(FHDLTestCase):
         self.assertEqual(e2.shape(), signed(2))
 
     def test_cast_enum_wrong(self):
-        with self.assertRaises(TypeError,
-                msg="Only enumerations with integer values can be used as value shapes"):
+        with self.assertRaisesRegex(TypeError,
+                r"^Only enumerations with integer values can be used as value shapes$"):
             Value.cast(StringEnum.FOO)
 
     def test_bool(self):
-        with self.assertRaises(TypeError,
-                msg="Attempted to convert nMigen value to boolean"):
+        with self.assertRaisesRegex(TypeError,
+                r"^Attempted to convert nMigen value to boolean$"):
             if Const(0):
                 pass
 
@@ -171,8 +171,8 @@ class ValueTestCase(FHDLTestCase):
         self.assertIsInstance(s2, Slice)
         self.assertEqual(s2.start, 3)
         self.assertEqual(s2.stop, 4)
-        with self.assertRaises(IndexError,
-                msg="Cannot index 5 bits into 4-bit value"):
+        with self.assertRaisesRegex(IndexError,
+                r"^Cannot index 5 bits into 4-bit value$"):
             Const(10)[5]
 
     def test_getitem_slice(self):
@@ -197,8 +197,8 @@ class ValueTestCase(FHDLTestCase):
         self.assertEqual(s3.parts[2].stop, 5)
 
     def test_getitem_wrong(self):
-        with self.assertRaises(TypeError,
-                msg="Cannot index value with 'str'"):
+        with self.assertRaisesRegex(TypeError,
+                r"^Cannot index value with 'str'$"):
             Const(31)["str"]
 
 
@@ -216,8 +216,8 @@ class ConstTestCase(FHDLTestCase):
         self.assertEqual(Const(0, unsigned(0)).shape(), unsigned(0))
 
     def test_shape_wrong(self):
-        with self.assertRaises(TypeError,
-                msg="Width must be a non-negative integer, not -1"):
+        with self.assertRaisesRegex(TypeError,
+                r"^Width must be a non-negative integer, not -1$"):
             Const(1, -1)
 
     def test_normalization(self):
@@ -311,8 +311,8 @@ class OperatorTestCase(FHDLTestCase):
         self.assertEqual(v5.shape(), unsigned(4))
 
     def test_mod_wrong(self):
-        with self.assertRaises(NotImplementedError,
-                msg="Division by a signed value is not supported"):
+        with self.assertRaisesRegex(NotImplementedError,
+                r"^Division by a signed value is not supported$"):
             Const(0, signed(4)) % Const(0, signed(6))
 
     def test_floordiv(self):
@@ -325,8 +325,8 @@ class OperatorTestCase(FHDLTestCase):
         self.assertEqual(v5.shape(), unsigned(4))
 
     def test_floordiv_wrong(self):
-        with self.assertRaises(NotImplementedError,
-                msg="Division by a signed value is not supported"):
+        with self.assertRaisesRegex(NotImplementedError,
+                r"^Division by a signed value is not supported$"):
             Const(0, signed(4)) // Const(0, signed(6))
 
     def test_and(self):
@@ -374,11 +374,11 @@ class OperatorTestCase(FHDLTestCase):
         self.assertEqual(v1.shape(), unsigned(11))
 
     def test_shl_wrong(self):
-        with self.assertRaises(NotImplementedError,
-                msg="Shift by a signed value is not supported"):
+        with self.assertRaisesRegex(NotImplementedError,
+                r"^Shift by a signed value is not supported$"):
             1 << Const(0, signed(6))
-        with self.assertRaises(NotImplementedError,
-                msg="Shift by a signed value is not supported"):
+        with self.assertRaisesRegex(NotImplementedError,
+                r"^Shift by a signed value is not supported$"):
             Const(1, unsigned(4)) << -1
 
     def test_shr(self):
@@ -387,11 +387,11 @@ class OperatorTestCase(FHDLTestCase):
         self.assertEqual(v1.shape(), unsigned(4))
 
     def test_shr_wrong(self):
-        with self.assertRaises(NotImplementedError,
-                msg="Shift by a signed value is not supported"):
+        with self.assertRaisesRegex(NotImplementedError,
+                r"^Shift by a signed value is not supported$"):
             1 << Const(0, signed(6))
-        with self.assertRaises(NotImplementedError,
-                msg="Shift by a signed value is not supported"):
+        with self.assertRaisesRegex(NotImplementedError,
+                r"^Shift by a signed value is not supported$"):
             Const(1, unsigned(4)) << -1
 
     def test_lt(self):
@@ -486,25 +486,26 @@ class OperatorTestCase(FHDLTestCase):
 
     def test_matches_width_wrong(self):
         s = Signal(4)
-        with self.assertRaises(SyntaxError,
-                msg="Match pattern '--' must have the same width as match value (which is 4)"):
+        with self.assertRaisesRegex(SyntaxError,
+                r"^Match pattern '--' must have the same width as match value \(which is 4\)$"):
             s.matches("--")
-        with self.assertWarns(SyntaxWarning,
-                msg="Match pattern '10110' is wider than match value (which has width 4); "
-                    "comparison will never be true"):
+
+        with self.assertWarnsRegex(SyntaxWarning,
+                (r"^Match pattern '10110' is wider than match value \(which has width 4\); "
+                    r"comparison will never be true$")):
             s.matches(0b10110)
 
     def test_matches_bits_wrong(self):
         s = Signal(4)
-        with self.assertRaises(SyntaxError,
-                msg="Match pattern 'abc' must consist of 0, 1, and - (don't care) bits, "
-                    "and may include whitespace"):
+        with self.assertRaisesRegex(SyntaxError,
+                (r"^Match pattern 'abc' must consist of 0, 1, and - \(don't care\) bits, "
+                    r"and may include whitespace$")):
             s.matches("abc")
 
     def test_matches_pattern_wrong(self):
         s = Signal(4)
-        with self.assertRaises(SyntaxError,
-                msg="Match pattern must be an integer, a string, or an enumeration, not 1.0"):
+        with self.assertRaisesRegex(SyntaxError,
+                r"^Match pattern must be an integer, a string, or an enumeration, not 1\.0$"):
             s.matches(1.0)
 
     def test_hash(self):
@@ -528,23 +529,23 @@ class SliceTestCase(FHDLTestCase):
         self.assertEqual((s1.start, s1.stop), (4, 7))
 
     def test_start_end_wrong(self):
-        with self.assertRaises(TypeError,
-                msg="Slice start must be an integer, not 'x'"):
+        with self.assertRaisesRegex(TypeError,
+                r"^Slice start must be an integer, not 'x'$"):
             Slice(0, "x", 1)
-        with self.assertRaises(TypeError,
-                msg="Slice stop must be an integer, not 'x'"):
+        with self.assertRaisesRegex(TypeError,
+                r"^Slice stop must be an integer, not 'x'$"):
             Slice(0, 1, "x")
 
     def test_start_end_out_of_range(self):
         c = Const(0, 8)
-        with self.assertRaises(IndexError,
-                msg="Cannot start slice 10 bits into 8-bit value"):
+        with self.assertRaisesRegex(IndexError,
+                r"^Cannot start slice 10 bits into 8-bit value$"):
             Slice(c, 10, 12)
-        with self.assertRaises(IndexError,
-                msg="Cannot stop slice 12 bits into 8-bit value"):
+        with self.assertRaisesRegex(IndexError,
+                r"^Cannot stop slice 12 bits into 8-bit value$"):
             Slice(c, 0, 12)
-        with self.assertRaises(IndexError,
-                msg="Slice start 4 must be less than slice stop 2"):
+        with self.assertRaisesRegex(IndexError,
+                r"^Slice start 4 must be less than slice stop 2$"):
             Slice(c, 4, 2)
 
     def test_repr(self):
@@ -740,8 +741,8 @@ class SignalTestCase(FHDLTestCase):
         self.assertEqual(s11.shape(), unsigned(1))
 
     def test_shape_wrong(self):
-        with self.assertRaises(TypeError,
-                msg="Width must be a non-negative integer, not -10"):
+        with self.assertRaisesRegex(TypeError,
+                r"^Width must be a non-negative integer, not -10$"):
             Signal(-10)
 
     def test_name(self):
@@ -758,20 +759,20 @@ class SignalTestCase(FHDLTestCase):
     def test_reset_enum(self):
         s1 = Signal(2, reset=UnsignedEnum.BAR)
         self.assertEqual(s1.reset, 2)
-        with self.assertRaises(TypeError,
-                msg="Reset value has to be an int or an integral Enum"
+        with self.assertRaisesRegex(TypeError,
+                r"^Reset value has to be an int or an integral Enum$"
         ):
             Signal(1, reset=StringEnum.FOO)
 
     def test_reset_narrow(self):
-        with self.assertWarns(SyntaxWarning,
-                msg="Reset value 8 requires 4 bits to represent, but the signal only has 3 bits"):
+        with self.assertWarnsRegex(SyntaxWarning,
+                r"^Reset value 8 requires 4 bits to represent, but the signal only has 3 bits$"):
             Signal(3, reset=8)
-        with self.assertWarns(SyntaxWarning,
-                msg="Reset value 4 requires 4 bits to represent, but the signal only has 3 bits"):
+        with self.assertWarnsRegex(SyntaxWarning,
+                r"^Reset value 4 requires 4 bits to represent, but the signal only has 3 bits$"):
             Signal(signed(3), reset=4)
-        with self.assertWarns(SyntaxWarning,
-                msg="Reset value -5 requires 4 bits to represent, but the signal only has 3 bits"):
+        with self.assertWarnsRegex(SyntaxWarning,
+                r"^Reset value -5 requires 4 bits to represent, but the signal only has 3 bits$"):
             Signal(signed(3), reset=-5)
 
     def test_attrs(self):
@@ -826,8 +827,8 @@ class ClockSignalTestCase(FHDLTestCase):
         s2 = ClockSignal("pix")
         self.assertEqual(s2.domain, "pix")
 
-        with self.assertRaises(TypeError,
-                msg="Clock domain name must be a string, not 1"):
+        with self.assertRaisesRegex(TypeError,
+                r"^Clock domain name must be a string, not 1$"):
             ClockSignal(1)
 
     def test_shape(self):
@@ -840,8 +841,8 @@ class ClockSignalTestCase(FHDLTestCase):
         self.assertEqual(repr(s1), "(clk sync)")
 
     def test_wrong_name_comb(self):
-        with self.assertRaises(ValueError,
-                msg="Domain 'comb' does not have a clock"):
+        with self.assertRaisesRegex(ValueError,
+                r"^Domain 'comb' does not have a clock$"):
             ClockSignal("comb")
 
 
@@ -852,8 +853,8 @@ class ResetSignalTestCase(FHDLTestCase):
         s2 = ResetSignal("pix")
         self.assertEqual(s2.domain, "pix")
 
-        with self.assertRaises(TypeError,
-                msg="Clock domain name must be a string, not 1"):
+        with self.assertRaisesRegex(TypeError,
+                r"^Clock domain name must be a string, not 1$"):
             ResetSignal(1)
 
     def test_shape(self):
@@ -866,8 +867,8 @@ class ResetSignalTestCase(FHDLTestCase):
         self.assertEqual(repr(s1), "(rst sync)")
 
     def test_wrong_name_comb(self):
-        with self.assertRaises(ValueError,
-                msg="Domain 'comb' does not have a reset"):
+        with self.assertRaisesRegex(ValueError,
+                r"^Domain 'comb' does not have a reset$"):
             ResetSignal("comb")
 
 
@@ -904,19 +905,19 @@ class SampleTestCase(FHDLTestCase):
         s3 = Sample(ResetSignal(), 1, "sync")
 
     def test_wrong_value_operator(self):
-        with self.assertRaises(TypeError,
-                "Sampled value must be a signal or a constant, not "
-                "(+ (sig $signal) (const 1'd1))"):
+        with self.assertRaisesRegex(TypeError,
+                (r"^Sampled value must be a signal or a constant, not "
+                r"\(\+ \(sig \$signal\) \(const 1'd1\)\)$")):
             Sample(Signal() + 1, 1, "sync")
 
     def test_wrong_clocks_neg(self):
-        with self.assertRaises(ValueError,
-                "Cannot sample a value 1 cycles in the future"):
+        with self.assertRaisesRegex(ValueError,
+                r"^Cannot sample a value 1 cycles in the future$"):
             Sample(Signal(), -1, "sync")
 
     def test_wrong_domain(self):
-        with self.assertRaises(TypeError,
-                "Domain name must be a string or None, not 0"):
+        with self.assertRaisesRegex(TypeError,
+                r"^Domain name must be a string or None, not 0$"):
             Sample(Signal(), 1, 0)
 
 

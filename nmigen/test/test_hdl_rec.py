@@ -290,6 +290,7 @@ class ConnectTestCase(FHDLTestCase):
         with self.assertRaisesRegex(AttributeError,
                 r"^Cannot include field 'foo' because it is not present in record 'core'$"):
             core.connect(periph, include={"foo": True})
+
         with self.assertRaisesRegex(AttributeError,
                 r"^Cannot exclude field 'foo' because it is not present in record 'core'$"):
             core.connect(periph, exclude={"foo": True})

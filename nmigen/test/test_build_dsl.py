@@ -46,9 +46,9 @@ class PinsTestCase(FHDLTestCase):
         self.assertEqual(p.map_names(mapping, p), ["A1"])
 
     def test_wrong_names(self):
-        with self.assertRaisesRegex(TypeError, 
+        with self.assertRaisesRegex(TypeError,
                 r"^Names must be a whitespace-separated string, not \['A0', 'A1', 'A2'\]$"):
-            p = Pins(["AO", "A1", "A2"])
+            p = Pins(["A0", "A1", "A2"])
 
     def test_wrong_dir(self):
         with self.assertRaisesRegex(TypeError,
@@ -215,10 +215,6 @@ class SubsignalTestCase(FHDLTestCase):
             s = Subsignal("a", Subsignal("b", Pins("A0")), Pins("B0"))
 
     def test_wrong_clock(self):
-        with self.assertRaisesRegex(TypeError,
-                (r"^Clock constraint can only be applied to Pins or DiffPairs, not "
-                    r"\(subsignal b \(pins io A0\)\)$")):
-            s = Subsignal("a", Subsignal("b", Pins("A0")), Clock(1e6))
         with self.assertRaisesRegex(TypeError,
                 (r"^Clock constraint can only be applied to Pins or DiffPairs, not "
                     r"\(subsignal b \(pins io A0\)\)$")):

@@ -489,7 +489,6 @@ class OperatorTestCase(FHDLTestCase):
         with self.assertRaisesRegex(SyntaxError,
                 r"^Match pattern '--' must have the same width as match value \(which is 4\)$"):
             s.matches("--")
-
         with self.assertWarnsRegex(SyntaxWarning,
                 (r"^Match pattern '10110' is wider than match value \(which has width 4\); "
                     r"comparison will never be true$")):

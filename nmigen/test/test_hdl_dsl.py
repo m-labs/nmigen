@@ -451,7 +451,6 @@ class DSLTestCase(FHDLTestCase):
                 with m.Case(1.0):
                     pass
 
-
     def test_Case_outside_Switch_wrong(self):
         m = Module()
         with self.assertRaisesRegex(SyntaxError,

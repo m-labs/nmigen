@@ -53,7 +53,7 @@ class FHDLTestCase(unittest.TestCase):
         if msg is not None:
             self.assertEqual(str(warns[0].message), msg)
 
-    def assertFormal(self, spec, mode="bmc", depth=1):
+    def assertFormal(self, spec, mode="bmc", depth=1, engine="smtbmc"):
         caller, *_ = traceback.extract_stack(limit=2)
         spec_root, _ = os.path.splitext(caller.filename)
         spec_dir = os.path.dirname(spec_root)
@@ -80,7 +80,7 @@ class FHDLTestCase(unittest.TestCase):
         wait on
 
         [engines]
-        smtbmc
+        {engine}
 
         [script]
         read_ilang top.il
@@ -92,6 +92,7 @@ class FHDLTestCase(unittest.TestCase):
         """).format(
             mode=mode,
             depth=depth,
+            engine=engine,
             script=script,
             rtlil=rtlil.convert(Fragment.get(spec, platform="formal"))
         )

@@ -53,14 +53,15 @@ class FHDLTestCase(unittest.TestCase):
         if msg is not None:
             self.assertEqual(str(warns[0].message), msg)
 
-    def assertFormal(self, spec, mode="bmc", depth=1, engine="smtbmc"):
+    def assertFormal(self, spec, mode="bmc", depth=1, engine="smtbmc", spec_name=None):
         caller, *_ = traceback.extract_stack(limit=2)
         spec_root, _ = os.path.splitext(caller.filename)
         spec_dir = os.path.dirname(spec_root)
-        spec_name = "{}_{}".format(
-            os.path.basename(spec_root).replace("test_", "spec_"),
-            caller.name.replace("test_", "")
-        )
+        if spec_name is None:
+            spec_name = "{}_{}".format(
+                os.path.basename(spec_root).replace("test_", "spec_"),
+                caller.name.replace("test_", "")
+            )
 
         # The sby -f switch seems not fully functional when sby is reading from stdin.
         if os.path.exists(os.path.join(spec_dir, spec_name)):

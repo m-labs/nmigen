@@ -1,3 +1,5 @@
+**This repos has moved to https://gitlab.com/nmigen/nmigen**
+
 # nMigen
 
 ## A refreshed Python toolbox for building complex digital hardware
